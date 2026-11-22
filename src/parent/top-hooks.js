@@ -7,6 +7,7 @@ import { handleDisplayMessage } from "../core/messages.js";
 import { hookAuthInfo, hookPresence, hookRoomInfo } from "../core/mod-sdk.js";
 import { createLogBatcher } from "../core/log-batcher.js";
 import { makeBeepRecord, makeOutgoingBeepRecord, makeRecord } from "../core/log-record.js";
+import { isSameRoomChatOrAction } from "../core/room.js";
 
 export async function installTopHooks({ state, feed, scheduleRender, updateInfo, logger }) {
 	const topBatcher = createLogBatcher((records) => {
@@ -47,6 +48,9 @@ export async function installTopHooks({ state, feed, scheduleRender, updateInfo,
 			if (state.topActive) return;
 			handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room) => {
 				if (!top) return;
+				const active = state.accounts.find((a) => a.key === state.activeKey);
+				// Same-room chat/action is already visible in the foreground account.
+				if (isSameRoomChatOrAction(kind, room, active?.room)) return;
 				top.unread[kind] += 1;
 				feed.push(room, text);
 				scheduleRender();

@@ -23,17 +23,20 @@ export function makeRecord({ data, sender, msg, metadata, room, player, maxChars
 	if (!text) return null;
 
 	const member = Number(sender?.MemberNumber) || 0;
-	const self = Number(player?.MemberNumber) === member && member !== 0;
+	const playerId = Number(player?.MemberNumber) || 0;
+	const self = playerId === member && member !== 0;
 	const msgid = metadata?.MsgId || messageId(data);
 	const body = text.slice(0, maxChars);
 
 	return {
-		uid: msgid ? `${member}|${msgid}` : `${member}|${fnv1a(body)}|${Math.floor(now / 1000)}`,
+		// Include the receiving PlayerID so the same room message is stored once
+		// per account instead of being overwritten by another recipient.
+		uid: msgid ? `${playerId}|${member}|${msgid}` : `${playerId}|${member}|${fnv1a(body)}|${Math.floor(now / 1000)}`,
 		member,
 		name: displayNameOf(sender),
 		self,
 		account: "",
-		playerId: Number(player?.MemberNumber) || 0,
+		playerId,
 		playerName: typeof player?.Name === "string" ? player.Name : "",
 		color: typeof sender?.LabelColor === "string" ? sender.LabelColor : "",
 		kind,
@@ -53,16 +56,17 @@ export function makeBeepRecord({ data, player, maxChars = 8000, now = Date.now()
 	if (!text) return null;
 
 	const member = Number(data.MemberNumber) || 0;
+	const playerId = Number(player?.MemberNumber) || 0;
 	const parsed = parseBeepMessage(data.Message);
 	const msgid = parsed?.metadata?.messageId;
 
 	return {
-		uid: msgid ? `${member}|${msgid}` : `${member}|${fnv1a(text)}|${Math.floor(now / 1000)}`,
+		uid: msgid ? `${playerId}|${member}|${msgid}` : `${playerId}|${member}|${fnv1a(text)}|${Math.floor(now / 1000)}`,
 		member,
 		name: typeof data.MemberName === "string" ? data.MemberName : "",
 		self: false,
 		account: "",
-		playerId: Number(player?.MemberNumber) || 0,
+		playerId,
 		playerName: typeof player?.Name === "string" ? player.Name : "",
 		color: "",
 		kind: "beep",
@@ -83,6 +87,7 @@ export function makeOutgoingBeepRecord({ target, msg, player, maxChars = 8000, n
 	const text = beepText({ Message: msg }).slice(0, maxChars);
 	if (!text) return null;
 
+	const playerId = Number(player?.MemberNumber) || 0;
 	const parsed = parseBeepMessage(msg);
 	const msgid = parsed?.metadata?.messageId;
 	const friendName = player?.FriendNames && typeof player.FriendNames.get === "function"
@@ -90,12 +95,12 @@ export function makeOutgoingBeepRecord({ target, msg, player, maxChars = 8000, n
 		: "";
 
 	return {
-		uid: msgid ? `${member}|${msgid}` : `${member}|${fnv1a(text)}|${Math.floor(now / 1000)}`,
+		uid: msgid ? `${playerId}|${member}|${msgid}` : `${playerId}|${member}|${fnv1a(text)}|${Math.floor(now / 1000)}`,
 		member,
 		name: typeof friendName === "string" && friendName ? friendName : `#${member}`,
 		self: true,
 		account: "",
-		playerId: Number(player?.MemberNumber) || 0,
+		playerId,
 		playerName: typeof player?.Name === "string" ? player.Name : "",
 		color: typeof player?.LabelColor === "string" ? player.LabelColor : "",
 		kind: "beep",

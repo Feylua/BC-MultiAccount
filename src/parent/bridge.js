@@ -2,6 +2,7 @@ import { CHANNEL } from "../constants.js";
 import { MSG } from "../protocol.js";
 import { isUnreadKind } from "../core/messages.js";
 import { normalizeAccountName, RC } from "../core/reconnect.js";
+import { isSameRoomChatOrAction } from "../core/room.js";
 
 export function createParentBridge({ state, accounts, feed, scheduleRender, configureAccount, logger }) {
 	function listen() {
@@ -36,6 +37,10 @@ export function createParentBridge({ state, accounts, feed, scheduleRender, conf
 				case MSG.UNREAD: {
 					if (acc.key === state.activeKey) break;
 					if (!isUnreadKind(data.kind)) break;
+					const active = state.accounts.find((a) => a.key === state.activeKey);
+					// Same-room chat/action already visible in the foreground account;
+					// don't count it as unread for background accounts.
+					if (isSameRoomChatOrAction(data.kind, data.room, active?.room)) break;
 					acc.unread[data.kind] += 1;
 					feed.push(data.room, data.text);
 					scheduleRender();

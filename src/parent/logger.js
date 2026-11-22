@@ -18,6 +18,12 @@ export function createLogger({ state, settings }) {
 				record.playerId = Number(playerId);
 			}
 			if (!record.playerName && playerName) record.playerName = playerName;
+			// Defensive: records produced by an older frame may not yet include
+			// the receiver in their ID, which would overwrite another account's copy.
+			if (record.playerId > 0 && typeof record.uid === "string"
+				&& !record.uid.startsWith(`${record.playerId}|`)) {
+				record.uid = `${record.playerId}|${record.uid}`;
+			}
 			out.push(record);
 		}
 		return out;

@@ -8,6 +8,7 @@ import {
 } from "../src/core/messages.js";
 import { beepPreviewText, isChatBeep, isReactionBeep, isRecordableBeep } from "../src/core/beep.js";
 import { makeBeepRecord, makeOutgoingBeepRecord, makeRecord } from "../src/core/log-record.js";
+import { isSameRoomChatOrAction } from "../src/core/room.js";
 
 globalThis.window = {
 	FriendListBeepParseMessage(raw) {
@@ -172,4 +173,28 @@ test("makeOutgoingBeepRecord rejects empty message", () => {
 		msg: "",
 		player: { MemberNumber: 9, Name: "Sender" },
 	}), null);
+});
+
+test("same-room chat/action unread suppression only applies to chat/action", () => {
+	assert.equal(isSameRoomChatOrAction("chat", "Room A", "Room A"), true);
+	assert.equal(isSameRoomChatOrAction("action", "Room A", "Room A"), true);
+	assert.equal(isSameRoomChatOrAction("activity", "Room A", "Room A"), false);
+	assert.equal(isSameRoomChatOrAction("whisper", "Room A", "Room A"), false);
+	assert.equal(isSameRoomChatOrAction("chat", "Room A", "Room B"), false);
+	assert.equal(isSameRoomChatOrAction("chat", "", ""), false);
+});
+
+test("same message is stored separately for each receiving PlayerID", () => {
+	const common = {
+		data: { Type: "Chat", Sender: 1 },
+		sender: { MemberNumber: 1, Name: "Alice" },
+		msg: "hello",
+		metadata: { MsgId: "same-msg" },
+		room: "Room A",
+	};
+	const first = makeRecord({ ...common, player: { MemberNumber: 9, Name: "A" } });
+	const second = makeRecord({ ...common, player: { MemberNumber: 10, Name: "B" } });
+	assert.notEqual(first.uid, second.uid);
+	assert.equal(first.uid, "9|1|same-msg");
+	assert.equal(second.uid, "10|1|same-msg");
 });
