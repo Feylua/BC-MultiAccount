@@ -1,0 +1,632 @@
+
+				#bcma-bar {
+					position: fixed;
+					top: 8px;
+					left: 50%;
+					transform: translateX(-50%);
+					z-index: 2147483647;
+					display: flex;
+					align-items: flex-start;
+					gap: 6px;
+					padding: 5px 7px;
+					box-sizing: border-box;
+					max-width: calc(100vw - 16px);
+					border: 1px solid rgba(255,255,255,0.14);
+					border-radius: 12px;
+					background: rgba(18,19,24,0.88);
+					box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+					backdrop-filter: blur(8px);
+					font: 13px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+					color: #fff;
+					user-select: none;
+					pointer-events: auto;
+				}
+				#bcma-drag {
+					cursor: grab;
+					opacity: 0.55;
+					padding: 0 2px;
+					font-size: 16px;
+					line-height: 1;
+				}
+				#bcma-drag:active { cursor: grabbing; }
+				#bcma-list {
+					display: flex;
+					align-items: flex-start;
+					gap: 8px;
+					max-width: calc(100vw - 70px);
+					overflow-x: auto;
+					overflow-y: hidden;
+					scrollbar-width: thin;
+				}
+				.bcma-account {
+					display: flex;
+					flex-direction: column;
+					align-items: center;
+					gap: 3px;
+					min-width: 48px;
+					max-width: 76px;
+					flex: 0 0 auto;
+				}
+				.bcma-acc, .bcma-add {
+					appearance: none;
+					-webkit-appearance: none;
+					box-sizing: border-box;
+					margin: 0;
+					padding: 0;
+					border: 1px solid rgba(255,255,255,0.18);
+					border-radius: 10px;
+					background: #2a2d34;
+					color: #fff;
+					cursor: pointer;
+					font: inherit;
+					outline: none;
+				}
+				.bcma-acc {
+					position: relative;
+					width: 40px;
+					height: 40px;
+					display: grid;
+					place-items: center;
+					transition: opacity 120ms ease, filter 120ms ease, background 120ms ease;
+				}
+				.bcma-acc:hover, .bcma-add:hover {
+					background: #3a3f49;
+					border-color: rgba(255,255,255,0.35);
+				}
+				.bcma-acc.active {
+					background: #1e3a5f;
+					border-color: #93c5fd;
+					box-shadow: 0 0 0 2px rgba(59,130,246,0.75);
+				}
+				.bcma-acc.online {
+					background: #2f3d33;
+					border-color: rgba(74,222,128,0.55);
+					box-shadow: 0 0 10px rgba(74,222,128,0.16);
+				}
+				.bcma-acc.active.online {
+					background: #1e3a5f;
+					border-color: #93c5fd;
+					box-shadow: 0 0 0 2px rgba(59,130,246,0.75), 0 0 12px rgba(74,222,128,0.2);
+				}
+				.bcma-acc.offline {
+					opacity: 0.38;
+					filter: grayscale(0.75);
+				}
+				.bcma-name, .bcma-room {
+					max-width: 76px;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+					text-align: center;
+					line-height: 1.2;
+				}
+				.bcma-name {
+					font-size: 11px;
+					font-weight: 600;
+					color: #e5e7eb;
+				}
+				.bcma-room {
+					font-size: 10px;
+					color: #93c5fd;
+				}
+				.bcma-name:empty, .bcma-room:empty {
+					display: none;
+				}
+				.bcma-account.offline .bcma-name,
+				.bcma-account.offline .bcma-room {
+					opacity: 0.55;
+				}
+				.bcma-add {
+					width: 32px;
+					height: 40px;
+					font-size: 20px;
+					line-height: 1;
+					color: #cbd5e1;
+					flex: 0 0 auto;
+				}
+				.bcma-frame {
+					position: fixed;
+					inset: 0;
+					width: 100%;
+					height: 100%;
+					border: 0;
+					background: #000;
+					z-index: 2147483000;
+				}
+
+				/* ===== v1.0.3 compact square tiles ===== */
+				#bcma-bar {
+					width: auto;
+					max-width: calc(100vw - 16px);
+					flex-direction: row;
+					align-items: flex-start;
+					gap: 6px;
+					padding: 5px 7px;
+				}
+				#bcma-drag {
+					text-align: left;
+					align-self: center;
+					padding: 0 2px;
+					font-size: 16px;
+				}
+				#bcma-list {
+					max-width: calc(100vw - 70px);
+					max-height: none;
+					flex-direction: row;
+					align-items: flex-start;
+					gap: 8px;
+					overflow-x: auto;
+					overflow-y: hidden;
+				}
+				.bcma-account {
+					position: relative;
+					width: 88px;
+					min-width: 88px;
+					max-width: 88px;
+					flex-direction: column;
+					align-items: center;
+					gap: 2px;
+					padding: 8px 0 0;
+					flex: 0 0 auto;
+				}
+				.bcma-close {
+					appearance: none;
+					-webkit-appearance: none;
+					box-sizing: border-box;
+					position: absolute;
+					left: 0;
+					top: 16px;
+					z-index: 3;
+					width: 24px;
+					min-width: 24px;
+					height: 24px;
+					margin: 0;
+					padding: 0;
+					border: 1px solid transparent;
+					border-radius: 6px;
+					background: transparent;
+					color: #9ca3af;
+					cursor: pointer;
+					font: 700 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+					outline: none;
+				}
+				/* Enlarge the touch target without enlarging the visible X. */
+				.bcma-close::before {
+					content: "";
+					position: absolute;
+					inset: -5px;
+					border-radius: 9px;
+				}
+				.bcma-close:hover {
+					background: rgba(220, 38, 38, 0.18);
+					border-color: rgba(220, 38, 38, 0.55);
+					color: #fecaca;
+				}
+				.bcma-close.disabled {
+					opacity: 0.28;
+					cursor: not-allowed;
+				}
+				.bcma-close.disabled:hover {
+					background: transparent;
+					border-color: transparent;
+					color: #9ca3af;
+				}
+				.bcma-icon {
+					position: relative;
+					width: 40px;
+					height: 40px;
+					flex: 0 0 auto;
+					margin: 0 auto;
+				}
+				.bcma-acc {
+					width: 40px;
+					height: 40px;
+					min-width: 0;
+					flex: none;
+					display: grid;
+					place-items: center;
+					padding: 0;
+					overflow: visible;
+				}
+				.bcma-avatar {
+					font-weight: 700;
+					font-size: 14px;
+					line-height: 1;
+				}
+				.bcma-name {
+					width: 84px;
+					max-width: 84px;
+					font-size: 11px;
+					font-weight: 600;
+					line-height: 1.2;
+					text-align: center;
+					color: #e5e7eb;
+				}
+				.bcma-room {
+					width: 84px;
+					max-width: 84px;
+					font-size: 9px;
+					line-height: 1.2;
+					text-align: center;
+					color: #93c5fd;
+				}
+				.bcma-unread {
+					position: absolute;
+					top: -6px;
+					right: -6px;
+					min-width: 16px;
+					height: 16px;
+					padding: 0 4px;
+					box-sizing: content-box;
+					border-radius: 8px;
+					background: #6b7280;
+					color: #fff;
+					font: 700 10px/16px system-ui, -apple-system, "Segoe UI", sans-serif;
+					text-align: center;
+					white-space: nowrap;
+					box-shadow: 0 0 0 2px #141418;
+					pointer-events: none;
+				}
+				.bcma-unread.chat { background: #2563eb; }
+				.bcma-unread.whisper { background: #dc2626; }
+				.bcma-unread.muted { background: #6b7280; }
+				.bcma-unread.empty {
+					visibility: hidden;
+				}
+				.bcma-add {
+					width: 32px;
+					height: 32px;
+					margin: 12px 0 0;
+					font-size: 20px;
+					align-self: flex-start;
+					flex: 0 0 auto;
+				}
+
+				/* ===== v1.0.4 background-message feed ===== */
+				#bcma-feed-toggle {
+					appearance: none;
+					-webkit-appearance: none;
+					position: absolute;
+					left: 50%;
+					bottom: -15px;
+					transform: translateX(-50%);
+					z-index: 5;
+					width: 52px;
+					height: 16px;
+					margin: 0;
+					padding: 0;
+					border: 1px solid rgba(255,255,255,0.18);
+					border-top: 0;
+					border-radius: 0 0 8px 8px;
+					background: rgba(0,0,0,0.72);
+					color: #e5e7eb;
+					cursor: pointer;
+					font: 700 10px/12px system-ui, -apple-system, "Segoe UI", sans-serif;
+					outline: none;
+				}
+				#bcma-feed-toggle:hover {
+					background: rgba(20,20,24,0.9);
+					color: #fff;
+				}
+				#bcma-feed {
+					position: absolute;
+					top: calc(100% + 17px);
+					left: 0;
+					z-index: 4;
+					width: 22em;
+					height: 19.6em; /* 14 lines at line-height 1.4 */
+					padding: 4px 6px;
+					box-sizing: content-box;
+					overflow: hidden;
+					border: 1px solid rgba(255,255,255,0.16);
+					border-radius: 10px;
+					background: rgba(0,0,0,0.72);
+					backdrop-filter: blur(5px);
+					color: #fff;
+					font-size: 11px;
+					line-height: 1.4;
+					text-align: left;
+					pointer-events: auto;
+				}
+				#bcma-feed[hidden] {
+					display: none;
+				}
+				.bcma-feed-line {
+					height: 1.4em;
+					line-height: 1.4;
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+				}
+			
+
+				/* ===== v1.1.1 settings ===== */
+				#bcma-settings {
+					appearance: none;
+					-webkit-appearance: none;
+					position: absolute;
+					right: 4px;
+					bottom: 0;
+					z-index: 6;
+					width: 18px;
+					height: 18px;
+					margin: 0;
+					padding: 0;
+					border: 1px solid transparent;
+					border-radius: 6px;
+					background: transparent;
+					color: #9ca3af;
+					cursor: pointer;
+					font: 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+					outline: none;
+				}
+				#bcma-settings:hover {
+					background: rgba(255,255,255,0.1);
+					border-color: rgba(255,255,255,0.25);
+					color: #fff;
+				}
+				#bcma-settings-overlay {
+					position: fixed;
+					inset: 0;
+					z-index: 2147483647;
+					display: grid;
+					place-items: center;
+					background: rgba(0,0,0,0.45);
+					pointer-events: auto;
+				}
+				#bcma-settings-overlay[hidden] {
+					display: none;
+				}
+				#bcma-settings-panel {
+					width: 310px;
+					max-width: calc(100vw - 24px);
+					max-height: calc(100vh - 24px);
+					overflow-y: auto;
+					box-sizing: border-box;
+					padding: 10px 12px 12px;
+					border: 1px solid rgba(255,255,255,0.18);
+					border-radius: 12px;
+					background: rgba(0,0,0,0.86);
+					box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+					backdrop-filter: blur(8px);
+					color: #fff;
+					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+				}
+				.bcma-settings-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 8px;
+					margin-bottom: 10px;
+				}
+				.bcma-settings-title {
+					margin: 0;
+					font-size: 16px;
+					font-weight: 700;
+					color: #fff;
+				}
+				#bcma-settings-close {
+					appearance: none;
+					-webkit-appearance: none;
+					width: 26px;
+					height: 26px;
+					margin: 0;
+					padding: 0;
+					border: 1px solid transparent;
+					border-radius: 6px;
+					background: transparent;
+					color: #d1d5db;
+					cursor: pointer;
+					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+					outline: none;
+				}
+				#bcma-settings-close:hover {
+					background: rgba(220,38,38,0.2);
+					border-color: rgba(220,38,38,0.55);
+					color: #fecaca;
+				}
+				.bcma-settings-check {
+					display: flex;
+					align-items: center;
+					gap: 7px;
+					margin-bottom: 12px;
+					cursor: pointer;
+				}
+				.bcma-settings-check input {
+					accent-color: #3b82f6;
+				}
+				.bcma-settings-section-title {
+					margin: 0 0 7px;
+					padding-top: 9px;
+					border-top: 1px solid rgba(255,255,255,0.14);
+					font-size: 13px;
+					font-weight: 700;
+					color: #e5e7eb;
+				}
+				.bcma-settings-sound {
+					margin-bottom: 9px;
+				}
+				.bcma-settings-sound-title {
+					margin-bottom: 5px;
+					color: #93c5fd;
+					font-size: 12px;
+					font-weight: 600;
+				}
+				.bcma-settings-radio {
+					display: flex;
+					align-items: center;
+					gap: 6px;
+					margin: 3px 0;
+					cursor: pointer;
+				}
+				.bcma-settings-radio input {
+					accent-color: #3b82f6;
+				}
+
+				/* ===== v1.1.2 draggable settings + log export ===== */
+				#bcma-settings-panel {
+					position: absolute;
+					left: 50%;
+					top: 50%;
+					transform: translate(-50%, -50%);
+					margin: 0;
+				}
+				.bcma-settings-header {
+					cursor: grab;
+					user-select: none;
+					touch-action: none;
+				}
+				.bcma-settings-header:active {
+					cursor: grabbing;
+				}
+				.bcma-settings-log-info {
+					margin: 2px 0 8px;
+					padding: 6px 8px;
+					border: 1px solid rgba(255,255,255,0.1);
+					border-radius: 8px;
+					background: rgba(255,255,255,0.035);
+					font-size: 12px;
+					color: #cbd5e1;
+				}
+				.bcma-settings-log-row {
+					display: flex;
+					justify-content: space-between;
+					gap: 10px;
+					line-height: 1.6;
+				}
+				.bcma-settings-log-value {
+					color: #93c5fd;
+					text-align: right;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				}
+				.bcma-settings-actions {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 6px;
+					margin-top: 2px;
+				}
+				.bcma-settings-button,
+				.bcma-log-btn {
+					appearance: none;
+					-webkit-appearance: none;
+					margin: 0;
+					padding: 6px 9px;
+					border: 1px solid rgba(255,255,255,0.2);
+					border-radius: 7px;
+					background: #2a2d34;
+					color: #e5e7eb;
+					cursor: pointer;
+					font: 12px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+				}
+				.bcma-settings-button:hover,
+				.bcma-log-btn:hover {
+					background: #3a3f49;
+					border-color: rgba(255,255,255,0.35);
+				}
+				.bcma-settings-button.primary,
+				.bcma-log-btn.primary {
+					background: #1e3a5f;
+					border-color: #60a5fa;
+					color: #fff;
+				}
+				#bcma-log-overlay {
+					position: fixed;
+					inset: 0;
+					z-index: 2147483647;
+					display: grid;
+					place-items: center;
+					background: rgba(0,0,0,0.45);
+					pointer-events: auto;
+				}
+				#bcma-log-overlay[hidden] {
+					display: none;
+				}
+				#bcma-log-panel {
+					width: 340px;
+					max-width: calc(100vw - 24px);
+					max-height: calc(100vh - 24px);
+					overflow-y: auto;
+					box-sizing: border-box;
+					padding: 10px 12px 12px;
+					border: 1px solid rgba(255,255,255,0.18);
+					border-radius: 12px;
+					background: rgba(0,0,0,0.88);
+					box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+					backdrop-filter: blur(8px);
+					color: #fff;
+					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+				}
+				.bcma-log-header {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					gap: 8px;
+					margin-bottom: 6px;
+				}
+				.bcma-log-title {
+					margin: 0;
+					font-size: 16px;
+					font-weight: 700;
+				}
+				#bcma-log-close {
+					appearance: none;
+					-webkit-appearance: none;
+					width: 26px;
+					height: 26px;
+					padding: 0;
+					border: 1px solid transparent;
+					border-radius: 6px;
+					background: transparent;
+					color: #d1d5db;
+					cursor: pointer;
+					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+				}
+				#bcma-log-close:hover {
+					background: rgba(220,38,38,0.2);
+					border-color: rgba(220,38,38,0.55);
+					color: #fecaca;
+				}
+				.bcma-log-source {
+					margin-bottom: 10px;
+					color: #93c5fd;
+					font-size: 12px;
+				}
+				.bcma-log-field {
+					margin-bottom: 8px;
+				}
+				.bcma-log-field[hidden] {
+					display: none;
+				}
+				.bcma-log-field-title {
+					margin: 8px 0 4px;
+					color: #e5e7eb;
+					font-size: 12px;
+					font-weight: 700;
+				}
+				.bcma-log-inline {
+					display: flex;
+					flex-wrap: wrap;
+					gap: 10px;
+				}
+				.bcma-log-check {
+					display: flex;
+					align-items: center;
+					gap: 6px;
+					margin: 4px 0;
+					cursor: pointer;
+				}
+				.bcma-log-check input {
+					accent-color: #3b82f6;
+				}
+				.bcma-log-footer {
+					display: flex;
+					justify-content: flex-end;
+					gap: 7px;
+					margin-top: 12px;
+				}
+
+				#bcma-settings-overlay:not([hidden]) {
+					display: block;
+				}

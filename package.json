@@ -1,0 +1,15 @@
+{
+  "name": "bc-multi-account",
+  "version": "1.1.5",
+  "private": true,
+  "type": "module",
+  "description": "Modular source for BC Multi-Account Switcher",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
