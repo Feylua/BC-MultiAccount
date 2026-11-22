@@ -17,6 +17,7 @@ export function createParentState() {
 		feed: null,
 		feedToggle: null,
 		feedMessages: [],
+		feedSeen: new Set(),
 		feedOpen: false,
 		credentials: new Map(),
 		pausedUntil: 0,

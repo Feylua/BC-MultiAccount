@@ -1,4 +1,5 @@
 import { FEED_MAX_LINES } from "../constants.js";
+import { isSameRoomChatOrAction } from "../core/room.js";
 
 export function createFeed(state) {
 	let feedElement = null;
@@ -19,10 +20,21 @@ export function createFeed(state) {
 		}
 	}
 
+	function visibleEntries() {
+		const active = state.accounts.find((a) => a.key === state.activeKey);
+		return state.feedMessages.filter((entry) => {
+			if (!entry || typeof entry === "string") return true;
+			// Once an account becomes active its old background history is redundant.
+			if (entry.accountKey === state.activeKey) return false;
+			return !isSameRoomChatOrAction(entry.kind, entry.room, active?.room);
+		});
+	}
+
 	function render() {
 		if (!feedElement) return;
 		const frag = document.createDocumentFragment();
-		for (const line of state.feedMessages) {
+		for (const entry of visibleEntries()) {
+			const line = typeof entry === "string" ? entry : entry.line;
 			const elem = document.createElement("div");
 			elem.className = "bcma-feed-line";
 			elem.textContent = line;
@@ -32,13 +44,36 @@ export function createFeed(state) {
 		feedElement.replaceChildren(frag);
 	}
 
-	function push(room, text) {
+	function push(room, text, meta = {}) {
+		const id = typeof meta.id === "string" && meta.id ? meta.id : "";
+		if (id) {
+			const key = `${meta.kind || ""}|${id}`;
+			if (state.feedSeen.has(key)) return false;
+			state.feedSeen.add(key);
+			if (state.feedSeen.size > 2000) state.feedSeen.clear();
+		}
 		const cleanRoom = String(room || "大厅").trim() || "大厅";
 		const cleanText = String(text || "(空消息)").replace(/\s+/g, " ").trim() || "(空消息)";
-		state.feedMessages.push(`[${cleanRoom}] ${cleanText}`);
+		state.feedMessages.push({
+			line: `[${cleanRoom}] ${cleanText}`,
+			kind: typeof meta.kind === "string" ? meta.kind : "",
+			accountKey: Number.isInteger(meta.accountKey) ? meta.accountKey : null,
+			room: cleanRoom,
+		});
 		if (state.feedMessages.length > FEED_MAX_LINES) {
 			state.feedMessages.splice(0, state.feedMessages.length - FEED_MAX_LINES);
 		}
+		render();
+		return true;
+	}
+
+	function clearRoom(room) {
+		const cleanRoom = String(room || "").trim();
+		if (!cleanRoom) return;
+		state.feedMessages = state.feedMessages.filter((entry) => {
+			if (typeof entry === "string") return true;
+			return entry.room !== cleanRoom;
+		});
 		render();
 	}
 
@@ -59,5 +94,5 @@ export function createFeed(state) {
 		setOpen(state.feedOpen);
 	}
 
-	return { bind, setOpen, render, push };
+	return { bind, setOpen, render, push, clearRoom };
 }

@@ -122,5 +122,5 @@ export function handleDisplayMessage(data, sender, msg, metadata, seen, report) 
 		const speaker = displayNameOf(sender);
 		if (speaker) text = `${speaker}: ${text}`;
 	}
-	report(kind, text, messageRoom());
+	report(kind, text, messageRoom(), id);
 }

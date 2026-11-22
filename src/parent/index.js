@@ -76,6 +76,7 @@ export function initParent() {
 		state,
 		render: () => toolbar.render(),
 		configureAccount,
+		afterSwitch: () => feed.render(),
 	});
 
 	function scheduleRender() {
@@ -150,7 +151,16 @@ export function initParent() {
 		].join("\u0001");
 		if (!force && key === state.topInfoKey) return;
 		state.topInfoKey = key;
+		const previousRoom = top.room;
 		accounts.applyInfo(top, info);
+		if (state.topActive) {
+			if (previousRoom !== top.room) {
+				feed.clearRoom(previousRoom);
+				feed.clearRoom(top.room);
+			} else {
+				feed.render();
+			}
+		}
 		scheduleRender();
 	}
 

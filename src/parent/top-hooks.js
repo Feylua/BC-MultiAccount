@@ -46,13 +46,13 @@ export async function installTopHooks({ state, feed, scheduleRender, updateInfo,
 			if (record) topBatcher.push(record);
 
 			if (state.topActive) return;
-			handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room) => {
+			handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id) => {
 				if (!top) return;
 				const active = state.accounts.find((a) => a.key === state.activeKey);
-				// Same-room chat/action is already visible in the foreground account.
+				// Same-room chat-like rows are already visible in the foreground account.
 				if (isSameRoomChatOrAction(kind, room, active?.room)) return;
 				top.unread[kind] += 1;
-				feed.push(room, text);
+				feed.push(room, text, { kind, accountKey: 1, id });
 				scheduleRender();
 			});
 		});
@@ -85,7 +85,7 @@ export async function installTopHooks({ state, feed, scheduleRender, updateInfo,
 					countBeep(data, state.topSeen, (kind, beep) => {
 						if (!top) return;
 						top.unread[kind] += 1;
-						feed.push(messageRoom(), beepPreviewText(beep));
+						feed.push(messageRoom(), beepPreviewText(beep), { kind: "beep", accountKey: 1 });
 						scheduleRender();
 					});
 				}

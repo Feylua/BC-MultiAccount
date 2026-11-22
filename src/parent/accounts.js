@@ -4,7 +4,7 @@ import { leaveFullscreen } from "../core/fullscreen.js";
 import { scrollChatToBottom } from "../core/chat.js";
 import { emptyUnread } from "./state.js";
 
-export function createAccounts({ state, render, configureAccount }) {
+export function createAccounts({ state, render, configureAccount, afterSwitch }) {
 	function createFrame(key) {
 		const url = new URL(location.href);
 		// Keep relative asset paths working if the page was opened without a trailing slash
@@ -89,6 +89,7 @@ export function createAccounts({ state, render, configureAccount }) {
 			render();
 			focus(acc);
 			requestScrollBottom(acc);
+			afterSwitch?.();
 			return;
 		}
 
@@ -111,6 +112,7 @@ export function createAccounts({ state, render, configureAccount }) {
 		render();
 		focus(acc);
 		requestScrollBottom(acc);
+		afterSwitch?.();
 	}
 
 	function add() {

@@ -175,10 +175,10 @@ test("makeOutgoingBeepRecord rejects empty message", () => {
 	}), null);
 });
 
-test("same-room chat/action unread suppression only applies to chat/action", () => {
+test("same-room chat-like unread suppression covers action and activity", () => {
 	assert.equal(isSameRoomChatOrAction("chat", "Room A", "Room A"), true);
 	assert.equal(isSameRoomChatOrAction("action", "Room A", "Room A"), true);
-	assert.equal(isSameRoomChatOrAction("activity", "Room A", "Room A"), false);
+	assert.equal(isSameRoomChatOrAction("activity", "Room A", "Room A"), true);
 	assert.equal(isSameRoomChatOrAction("whisper", "Room A", "Room A"), false);
 	assert.equal(isSameRoomChatOrAction("chat", "Room A", "Room B"), false);
 	assert.equal(isSameRoomChatOrAction("chat", "", ""), false);

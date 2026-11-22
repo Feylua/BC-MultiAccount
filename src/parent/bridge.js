@@ -15,16 +15,34 @@ export function createParentBridge({ state, accounts, feed, scheduleRender, conf
 			switch (data.type) {
 				case MSG.READY: {
 					acc.ready = true;
+					const previousRoom = acc.room;
 					accounts.applyInfo(acc, data);
 					accounts.clearUnread(acc);
 					configureAccount?.(acc);
 					accounts.postTo(acc, { type: MSG.SET_ACTIVE, active: acc.key === state.activeKey });
-					if (acc.key === state.activeKey) accounts.requestScrollBottom(acc);
+					if (acc.key === state.activeKey) {
+						accounts.requestScrollBottom(acc);
+						if (previousRoom !== acc.room) {
+							feed.clearRoom(previousRoom);
+							feed.clearRoom(acc.room);
+						} else {
+							feed.render();
+						}
+					}
 					scheduleRender();
 					break;
 				}
 				case MSG.ACCOUNT: {
+					const previousRoom = acc.room;
 					accounts.applyInfo(acc, data);
+					if (acc.key === state.activeKey) {
+						if (previousRoom !== acc.room) {
+							feed.clearRoom(previousRoom);
+							feed.clearRoom(acc.room);
+						} else {
+							feed.render();
+						}
+					}
 					scheduleRender();
 					break;
 				}
@@ -42,7 +60,7 @@ export function createParentBridge({ state, accounts, feed, scheduleRender, conf
 					// don't count it as unread for background accounts.
 					if (isSameRoomChatOrAction(data.kind, data.room, active?.room)) break;
 					acc.unread[data.kind] += 1;
-					feed.push(data.room, data.text);
+					feed.push(data.room, data.text, { kind: data.kind, accountKey: acc.key, id: data.id });
 					scheduleRender();
 					break;
 				}

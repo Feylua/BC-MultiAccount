@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
-// @version      1.1.6
+// @version      1.1.7
 // @description  One BC window, multiple logged-in accounts, unread feed, settings, auto-reconnect, and message-log export grouped by receiving PlayerID.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
@@ -20,7 +20,7 @@
   var MAX_ACCOUNTS = 8;
   var FEED_MAX_LINES = 14;
   var SETTINGS_KEY = "bcma.settings";
-  var VERSION = "1.1.6";
+  var VERSION = "1.1.7";
 
   // src/core/input.js
   function readChildId() {
@@ -363,6 +363,7 @@
       feed: null,
       feedToggle: null,
       feedMessages: [],
+      feedSeen: /* @__PURE__ */ new Set(),
       feedOpen: false,
       credentials: /* @__PURE__ */ new Map(),
       pausedUntil: 0,
@@ -373,6 +374,16 @@
       logger: null,
       logDialog: null
     };
+  }
+
+  // src/core/room.js
+  function sameRoom(a, b) {
+    const left = String(a || "").trim();
+    const right = String(b || "").trim();
+    return left !== "" && right !== "" && left === right;
+  }
+  function isSameRoomChatOrAction(kind, room, activeRoom) {
+    return (kind === "chat" || kind === "action" || kind === "activity") && sameRoom(room, activeRoom);
   }
 
   // src/parent/feed.js
@@ -392,10 +403,19 @@
       } catch {
       }
     }
+    function visibleEntries() {
+      const active = state.accounts.find((a) => a.key === state.activeKey);
+      return state.feedMessages.filter((entry) => {
+        if (!entry || typeof entry === "string") return true;
+        if (entry.accountKey === state.activeKey) return false;
+        return !isSameRoomChatOrAction(entry.kind, entry.room, active?.room);
+      });
+    }
     function render() {
       if (!feedElement) return;
       const frag = document.createDocumentFragment();
-      for (const line of state.feedMessages) {
+      for (const entry of visibleEntries()) {
+        const line = typeof entry === "string" ? entry : entry.line;
         const elem = document.createElement("div");
         elem.className = "bcma-feed-line";
         elem.textContent = line;
@@ -404,13 +424,35 @@
       }
       feedElement.replaceChildren(frag);
     }
-    function push(room, text) {
+    function push(room, text, meta = {}) {
+      const id = typeof meta.id === "string" && meta.id ? meta.id : "";
+      if (id) {
+        const key = `${meta.kind || ""}|${id}`;
+        if (state.feedSeen.has(key)) return false;
+        state.feedSeen.add(key);
+        if (state.feedSeen.size > 2e3) state.feedSeen.clear();
+      }
       const cleanRoom = String(room || "\u5927\u5385").trim() || "\u5927\u5385";
       const cleanText = String(text || "(\u7A7A\u6D88\u606F)").replace(/\s+/g, " ").trim() || "(\u7A7A\u6D88\u606F)";
-      state.feedMessages.push(`[${cleanRoom}] ${cleanText}`);
+      state.feedMessages.push({
+        line: `[${cleanRoom}] ${cleanText}`,
+        kind: typeof meta.kind === "string" ? meta.kind : "",
+        accountKey: Number.isInteger(meta.accountKey) ? meta.accountKey : null,
+        room: cleanRoom
+      });
       if (state.feedMessages.length > FEED_MAX_LINES) {
         state.feedMessages.splice(0, state.feedMessages.length - FEED_MAX_LINES);
       }
+      render();
+      return true;
+    }
+    function clearRoom(room) {
+      const cleanRoom = String(room || "").trim();
+      if (!cleanRoom) return;
+      state.feedMessages = state.feedMessages.filter((entry) => {
+        if (typeof entry === "string") return true;
+        return entry.room !== cleanRoom;
+      });
       render();
     }
     function bind(feed, toggle) {
@@ -429,7 +471,7 @@
       }
       setOpen(state.feedOpen);
     }
-    return { bind, setOpen, render, push };
+    return { bind, setOpen, render, push, clearRoom };
   }
 
   // src/parent/styles.css
@@ -623,7 +665,7 @@ ${status}` + (acc.room ? `
   }
 
   // src/parent/accounts.js
-  function createAccounts({ state, render, configureAccount }) {
+  function createAccounts({ state, render, configureAccount, afterSwitch }) {
     function createFrame(key) {
       const url = new URL(location.href);
       if (!url.pathname.endsWith("/") && !/\.[^/]+$/.test(url.pathname)) url.pathname += "/";
@@ -698,6 +740,7 @@ ${status}` + (acc.room ? `
         render();
         focus(acc);
         requestScrollBottom(acc);
+        afterSwitch?.();
         return;
       }
       if (!acc.top && document.fullscreenElement) {
@@ -715,6 +758,7 @@ ${status}` + (acc.room ? `
       render();
       focus(acc);
       requestScrollBottom(acc);
+      afterSwitch?.();
     }
     function add() {
       if (state.accounts.length >= MAX_ACCOUNTS) {
@@ -903,17 +947,7 @@ ${status}` + (acc.room ? `
       const speaker = displayNameOf(sender);
       if (speaker) text = `${speaker}: ${text}`;
     }
-    report(kind, text, messageRoom());
-  }
-
-  // src/core/room.js
-  function sameRoom(a, b) {
-    const left = String(a || "").trim();
-    const right = String(b || "").trim();
-    return left !== "" && right !== "" && left === right;
-  }
-  function isSameRoomChatOrAction(kind, room, activeRoom) {
-    return (kind === "chat" || kind === "action") && sameRoom(room, activeRoom);
+    report(kind, text, messageRoom(), id);
   }
 
   // src/parent/bridge.js
@@ -927,16 +961,34 @@ ${status}` + (acc.room ? `
         switch (data.type) {
           case MSG.READY: {
             acc.ready = true;
+            const previousRoom = acc.room;
             accounts.applyInfo(acc, data);
             accounts.clearUnread(acc);
             configureAccount?.(acc);
             accounts.postTo(acc, { type: MSG.SET_ACTIVE, active: acc.key === state.activeKey });
-            if (acc.key === state.activeKey) accounts.requestScrollBottom(acc);
+            if (acc.key === state.activeKey) {
+              accounts.requestScrollBottom(acc);
+              if (previousRoom !== acc.room) {
+                feed.clearRoom(previousRoom);
+                feed.clearRoom(acc.room);
+              } else {
+                feed.render();
+              }
+            }
             scheduleRender();
             break;
           }
           case MSG.ACCOUNT: {
+            const previousRoom = acc.room;
             accounts.applyInfo(acc, data);
+            if (acc.key === state.activeKey) {
+              if (previousRoom !== acc.room) {
+                feed.clearRoom(previousRoom);
+                feed.clearRoom(acc.room);
+              } else {
+                feed.render();
+              }
+            }
             scheduleRender();
             break;
           }
@@ -951,7 +1003,7 @@ ${status}` + (acc.room ? `
             const active = state.accounts.find((a) => a.key === state.activeKey);
             if (isSameRoomChatOrAction(data.kind, data.room, active?.room)) break;
             acc.unread[data.kind] += 1;
-            feed.push(data.room, data.text);
+            feed.push(data.room, data.text, { kind: data.kind, accountKey: acc.key, id: data.id });
             scheduleRender();
             break;
           }
@@ -1357,12 +1409,12 @@ ${status}` + (acc.room ? `
         });
         if (record) topBatcher.push(record);
         if (state.topActive) return;
-        handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room) => {
+        handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id) => {
           if (!top) return;
           const active = state.accounts.find((a) => a.key === state.activeKey);
           if (isSameRoomChatOrAction(kind, room, active?.room)) return;
           top.unread[kind] += 1;
-          feed.push(room, text);
+          feed.push(room, text, { kind, accountKey: 1, id });
           scheduleRender();
         });
       });
@@ -1391,7 +1443,7 @@ ${status}` + (acc.room ? `
             countBeep(data, state.topSeen, (kind, beep) => {
               if (!top) return;
               top.unread[kind] += 1;
-              feed.push(messageRoom(), beepPreviewText(beep));
+              feed.push(messageRoom(), beepPreviewText(beep), { kind: "beep", accountKey: 1 });
               scheduleRender();
             });
           }
@@ -2387,7 +2439,8 @@ render();
     accounts = createAccounts({
       state,
       render: () => toolbar.render(),
-      configureAccount
+      configureAccount,
+      afterSwitch: () => feed.render()
     });
     function scheduleRender() {
       if (state.renderTimer) return;
@@ -2458,7 +2511,16 @@ render();
       ].join("");
       if (!force && key === state.topInfoKey) return;
       state.topInfoKey = key;
+      const previousRoom = top.room;
       accounts.applyInfo(top, info);
+      if (state.topActive) {
+        if (previousRoom !== top.room) {
+          feed.clearRoom(previousRoom);
+          feed.clearRoom(top.room);
+        } else {
+          feed.render();
+        }
+      }
       scheduleRender();
     }
     function installKeyboard() {
@@ -2578,8 +2640,8 @@ render();
         });
         if (record) state.logBatcher?.push(record);
         if (state.active) return;
-        handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room) => {
-          post(MSG.UNREAD, { kind, text, room });
+        handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room, id2) => {
+          post(MSG.UNREAD, { kind, text, room, id: id2 });
         });
       });
     }
