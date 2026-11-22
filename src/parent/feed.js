@@ -54,6 +54,21 @@ export function createFeed(state) {
 		}
 		const cleanRoom = String(room || "大厅").trim() || "大厅";
 		const cleanText = String(text || "(空消息)").replace(/\s+/g, " ").trim() || "(空消息)";
+		const kind = typeof meta.kind === "string" ? meta.kind : "";
+		// Only records without a MsgId need the content fallback. A present but
+		// different MsgId means a different message and must not be merged.
+		if (!id && (kind === "chat" || kind === "action" || kind === "activity")) {
+			const sender = Number(meta.sender) || 0;
+			const recentKey = `${kind}|${cleanRoom}|${sender}|${cleanText}`;
+			const now = Date.now();
+			const last = state.feedRecent.get(recentKey);
+			if (last !== undefined && now - last <= 2000) return false;
+			state.feedRecent.set(recentKey, now);
+			if (state.feedRecent.size > 1000) {
+				const oldest = state.feedRecent.keys().next().value;
+				if (oldest !== undefined) state.feedRecent.delete(oldest);
+			}
+		}
 		state.feedMessages.push({
 			line: `[${cleanRoom}] ${cleanText}`,
 			kind: typeof meta.kind === "string" ? meta.kind : "",

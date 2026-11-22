@@ -62,8 +62,8 @@ export function initChild(id) {
 			if (record) state.logBatcher?.push(record);
 
 			if (state.active) return;
-			handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room, id) => {
-				post(MSG.UNREAD, { kind, text, room, id });
+			handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room, id, senderId) => {
+				post(MSG.UNREAD, { kind, text, room, id, sender: senderId });
 			});
 		});
 	}

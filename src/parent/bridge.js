@@ -60,7 +60,12 @@ export function createParentBridge({ state, accounts, feed, scheduleRender, conf
 					// don't count it as unread for background accounts.
 					if (isSameRoomChatOrAction(data.kind, data.room, active?.room)) break;
 					acc.unread[data.kind] += 1;
-					feed.push(data.room, data.text, { kind: data.kind, accountKey: acc.key, id: data.id });
+					feed.push(data.room, data.text, {
+						kind: data.kind,
+						accountKey: acc.key,
+						id: data.id,
+						sender: data.sender,
+					});
 					scheduleRender();
 					break;
 				}

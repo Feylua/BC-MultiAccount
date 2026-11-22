@@ -46,13 +46,13 @@ export async function installTopHooks({ state, feed, scheduleRender, updateInfo,
 			if (record) topBatcher.push(record);
 
 			if (state.topActive) return;
-			handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id) => {
+			handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id, senderId) => {
 				if (!top) return;
 				const active = state.accounts.find((a) => a.key === state.activeKey);
 				// Same-room chat-like rows are already visible in the foreground account.
 				if (isSameRoomChatOrAction(kind, room, active?.room)) return;
 				top.unread[kind] += 1;
-				feed.push(room, text, { kind, accountKey: 1, id });
+				feed.push(room, text, { kind, accountKey: 1, id, sender: senderId });
 				scheduleRender();
 			});
 		});

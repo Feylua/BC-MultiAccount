@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
-// @version      1.1.7
+// @version      1.1.8
 // @description  One BC window, multiple logged-in accounts, unread feed, settings, auto-reconnect, and message-log export grouped by receiving PlayerID.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
@@ -20,7 +20,7 @@
   var MAX_ACCOUNTS = 8;
   var FEED_MAX_LINES = 14;
   var SETTINGS_KEY = "bcma.settings";
-  var VERSION = "1.1.7";
+  var VERSION = "1.1.8";
 
   // src/core/input.js
   function readChildId() {
@@ -364,6 +364,7 @@
       feedToggle: null,
       feedMessages: [],
       feedSeen: /* @__PURE__ */ new Set(),
+      feedRecent: /* @__PURE__ */ new Map(),
       feedOpen: false,
       credentials: /* @__PURE__ */ new Map(),
       pausedUntil: 0,
@@ -434,6 +435,19 @@
       }
       const cleanRoom = String(room || "\u5927\u5385").trim() || "\u5927\u5385";
       const cleanText = String(text || "(\u7A7A\u6D88\u606F)").replace(/\s+/g, " ").trim() || "(\u7A7A\u6D88\u606F)";
+      const kind = typeof meta.kind === "string" ? meta.kind : "";
+      if (!id && (kind === "chat" || kind === "action" || kind === "activity")) {
+        const sender = Number(meta.sender) || 0;
+        const recentKey = `${kind}|${cleanRoom}|${sender}|${cleanText}`;
+        const now = Date.now();
+        const last = state.feedRecent.get(recentKey);
+        if (last !== void 0 && now - last <= 2e3) return false;
+        state.feedRecent.set(recentKey, now);
+        if (state.feedRecent.size > 1e3) {
+          const oldest = state.feedRecent.keys().next().value;
+          if (oldest !== void 0) state.feedRecent.delete(oldest);
+        }
+      }
       state.feedMessages.push({
         line: `[${cleanRoom}] ${cleanText}`,
         kind: typeof meta.kind === "string" ? meta.kind : "",
@@ -947,7 +961,7 @@ ${status}` + (acc.room ? `
       const speaker = displayNameOf(sender);
       if (speaker) text = `${speaker}: ${text}`;
     }
-    report(kind, text, messageRoom(), id);
+    report(kind, text, messageRoom(), id, Number(data?.Sender) || 0);
   }
 
   // src/parent/bridge.js
@@ -1003,7 +1017,12 @@ ${status}` + (acc.room ? `
             const active = state.accounts.find((a) => a.key === state.activeKey);
             if (isSameRoomChatOrAction(data.kind, data.room, active?.room)) break;
             acc.unread[data.kind] += 1;
-            feed.push(data.room, data.text, { kind: data.kind, accountKey: acc.key, id: data.id });
+            feed.push(data.room, data.text, {
+              kind: data.kind,
+              accountKey: acc.key,
+              id: data.id,
+              sender: data.sender
+            });
             scheduleRender();
             break;
           }
@@ -1409,12 +1428,12 @@ ${status}` + (acc.room ? `
         });
         if (record) topBatcher.push(record);
         if (state.topActive) return;
-        handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id) => {
+        handleDisplayMessage(data, sender, msg, metadata, state.topSeen, (kind, text, room, id, senderId) => {
           if (!top) return;
           const active = state.accounts.find((a) => a.key === state.activeKey);
           if (isSameRoomChatOrAction(kind, room, active?.room)) return;
           top.unread[kind] += 1;
-          feed.push(room, text, { kind, accountKey: 1, id });
+          feed.push(room, text, { kind, accountKey: 1, id, sender: senderId });
           scheduleRender();
         });
       });
@@ -2640,8 +2659,8 @@ render();
         });
         if (record) state.logBatcher?.push(record);
         if (state.active) return;
-        handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room, id2) => {
-          post(MSG.UNREAD, { kind, text, room, id: id2 });
+        handleDisplayMessage(data, sender, msg, metadata, state.seen, (kind, text, room, id2, senderId) => {
+          post(MSG.UNREAD, { kind, text, room, id: id2, sender: senderId });
         });
       });
     }

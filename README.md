@@ -1,8 +1,16 @@
-# BC Multi-Account Switcher v1.1.7
+# BC Multi-Account Switcher v1.1.8
 
 一个 Tampermonkey 用户脚本：**在一个 Bondage Club 窗口里同时登录多个账号**，随时切换，后台账号保持在线，并统计未读、记录消息、导出聊天记录。
 
 窗口模型很简单：当前标签页是 1 号账号，2..N 号账号跑在同源 iframe 里。同一时刻只显示一个账号，其他账号照常收发消息。
+
+## v1.1.8 变更
+
+- 修复多个后台账号在同一房间时，同一条 Action/Activity 在下拉框写入两次的问题；
+- 有 `MsgId` 时只按 `MsgId` 去重：相同 `MsgId` 合并，不同 `MsgId` 视为不同消息；
+- 仅当 `MsgId` 为空时，才对 Chat/Action/Activity 使用 `发送者 + 房间 + 文本` 的 2 秒窗口兜底去重；
+- 不同发送者的相同文本不会被合并；
+- 未读计数逻辑不变：每个后台账号仍然各自增加未读数。
 
 ## v1.1.7 变更
 
@@ -455,6 +463,7 @@ A：在。设置与缓存都在浏览器本地，与脚本文件无关。
 | 1.1.5 | 导出 HTML 增加类型筛选、收信 Player 比例图与统一时间格式 |
 | 1.1.6 | 前后台同房间时后台 Chat/Action 不计未读；消息按接收 PlayerID 分别保存副本 |
 | 1.1.7 | Activity 同房间过滤；切房清旧历史；同消息多后台计数但 Feed 只写一次 |
+| 1.1.8 | 有 MsgId 按 MsgId 去重；仅无 MsgId 的 Action/Activity 使用内容兜底去重 |
 
 ---
 
