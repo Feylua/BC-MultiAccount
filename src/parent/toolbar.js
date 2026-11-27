@@ -52,6 +52,43 @@ export function createToolbar({ state, feed, handlers }) {
 		});
 	}
 
+	function updateBarToggle() {
+		const bar = state.toolbar;
+		if (!bar) return;
+		const toggle = bar.querySelector("#bcma-bar-toggle");
+		if (!toggle) return;
+		const collapsed = bar.classList.contains("collapsed");
+		const count = state.accounts?.length || 0;
+		toggle.textContent = collapsed ? `› ${count}` : "‹";
+		toggle.title = collapsed ? `展开账号栏（${count} 个账号）` : "收起账号栏";
+		toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+	}
+
+	function setCollapsed(collapsed, persist = true) {
+		const bar = state.toolbar;
+		if (!bar) return;
+		bar.classList.toggle("collapsed", !!collapsed);
+		updateBarToggle();
+		if (!collapsed) {
+			// Expanding near the right/bottom edge must not push the bar off-screen.
+			const rect = bar.getBoundingClientRect();
+			if (rect.right > window.innerWidth) {
+				bar.style.transform = "none";
+				bar.style.left = `${Math.max(0, window.innerWidth - bar.offsetWidth)}px`;
+			}
+			if (rect.bottom > window.innerHeight) {
+				bar.style.top = `${Math.max(0, window.innerHeight - bar.offsetHeight)}px`;
+			}
+		}
+		if (persist) {
+			try {
+				localStorage.setItem("bcma.barCollapsed", collapsed ? "1" : "0");
+			} catch {
+				/* ignore */
+			}
+		}
+	}
+
 	function mount() {
 		injectStyles();
 		const old = document.getElementById("bcma-bar");
@@ -59,7 +96,8 @@ export function createToolbar({ state, feed, handlers }) {
 
 		const bar = document.createElement("div");
 		bar.id = "bcma-bar";
-		bar.innerHTML = '<div id="bcma-drag" title="拖动工具栏">⠿</div><div id="bcma-list"></div>' +
+		bar.innerHTML = '<button id="bcma-bar-toggle" type="button" title="收起账号栏" aria-controls="bcma-list" aria-expanded="true">‹</button>' +
+			'<div id="bcma-drag" title="拖动工具栏">⠿</div><div id="bcma-list"></div>' +
 			'<button id="bcma-feed-toggle" type="button" title="后台消息" aria-controls="bcma-feed" aria-expanded="false">▸</button>' +
 			'<div id="bcma-feed" hidden></div>' +
 			'<button id="bcma-settings" type="button" title="设置">⚙</button>';
@@ -68,6 +106,18 @@ export function createToolbar({ state, feed, handlers }) {
 
 		feed.bind(bar.querySelector("#bcma-feed"), bar.querySelector("#bcma-feed-toggle"));
 		bar.querySelector("#bcma-settings").addEventListener("click", handlers.onSettings);
+
+		const barToggle = bar.querySelector("#bcma-bar-toggle");
+		barToggle.addEventListener("click", (event) => {
+			event.stopPropagation();
+			setCollapsed(!bar.classList.contains("collapsed"));
+		});
+
+		try {
+			setCollapsed(localStorage.getItem("bcma.barCollapsed") === "1", false);
+		} catch {
+			/* ignore */
+		}
 
 		try {
 			const saved = JSON.parse(localStorage.getItem("bcma.pos") || "null");
@@ -220,6 +270,7 @@ export function createToolbar({ state, feed, handlers }) {
 		state.accounts.forEach((acc, index) => frag.appendChild(buildAccountEntry(acc, index)));
 		frag.appendChild(buildAddButton());
 		list.replaceChildren(frag);
+		updateBarToggle();
 	}
 
 	return { mount, render };

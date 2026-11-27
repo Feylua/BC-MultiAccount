@@ -1,6 +1,6 @@
 {
   "name": "bc-multi-account",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "type": "module",
   "description": "Modular source for BC Multi-Account Switcher",
