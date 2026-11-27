@@ -73,7 +73,14 @@ export function generateExportHtml(records, meta = {}) {
 			`<i style="background:${account.color}"></i>${escapeHtml(account.name)} <b>${account.count}</b></span>`;
 	}).join("");
 
-	const payload = JSON.stringify(records).replaceAll("<", "\\u003c");
+	const includeOriginal = meta.includeOriginal !== false;
+	const exportRecords = includeOriginal
+		? records
+		: records.map((record) => {
+			const { original, ...rest } = record;
+			return rest;
+		});
+	const payload = JSON.stringify(exportRecords).replaceAll("<", "\\u003c");
 	const title = meta.title || "BC Multi-Account 消息记录";
 	const source = meta.source || "";
 	const range = meta.range || "";
@@ -119,6 +126,16 @@ main { padding: 10px 18px 30px; }
 .name.self { color: #86efac; }
 .kind { color: #c4b5fd; font-size: 12px; }
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.text-original {
+  margin-top: 3px;
+  padding-left: 7px;
+  border-left: 2px solid #34d399;
+  color: #a7f3d0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 760px) {
   .row { grid-template-columns: 96px minmax(0,1fr); }
   .room, .name, .kind { grid-column: 2; }
@@ -149,6 +166,7 @@ main { padding: 10px 18px 30px; }
 <script id="payload" type="application/json">${payload}</script>
 <script>
 const DATA = JSON.parse(document.getElementById("payload").textContent);
+const SHOW_ORIGINAL = ${includeOriginal ? "true" : "false"};
 const ACCOUNTS = ${JSON.stringify(accountList).replaceAll("<", "\\u003c")};
 const KIND_LABEL = ${JSON.stringify({
 		chat: "聊天", whisper: "私聊", action: "动作", activity: "互动", beep: "Beep", system: "系统",
@@ -221,7 +239,8 @@ function render() {
     if (current !== "all" && String(record.playerId) !== current) return false;
     if (!kindVisibleFor(record)) return false;
     if (!q) return true;
-    return [record.text, record.name, record.room, record.account, record.playerName].some(value => String(value || "").toLowerCase().includes(q));
+    return [record.text, SHOW_ORIGINAL ? record.original : "", record.name, record.room, record.account, record.playerName]
+      .some(value => String(value || "").toLowerCase().includes(q));
   });
   count.textContent = filtered.length + " 条" + (filtered.length === DATA.length ? "" : "（共 " + DATA.length + " 条）");
   if (filtered.length === 0) {
@@ -252,6 +271,12 @@ function render() {
     const text = document.createElement("div");
     text.className = "text";
     text.textContent = record.text;
+    if (SHOW_ORIGINAL && record.original) {
+      const original = document.createElement("div");
+      original.className = "text-original";
+      original.textContent = "原文：" + record.original;
+      text.appendChild(original);
+    }
     row.append(time, room, name, kind, text);
     rows.appendChild(row);
   }

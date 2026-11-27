@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
 	classifyMessage,
+	extractOriginalMessage,
 	formatDisplayMessage,
 	isIncoming,
 	stripFeedNoise,
@@ -41,6 +42,70 @@ test("stripFeedNoise preserves body numbers", () => {
 test("stripFeedNoise is idempotent", () => {
 	const once = stripFeedNoise("#123 12:34 hello");
 	assert.equal(stripFeedNoise(once), once);
+});
+
+test("extractOriginalMessage prefers metadata and falls back to dictionary", () => {
+	assert.equal(
+		extractOriginalMessage(
+			{ Type: "Chat", Dictionary: [{ Effects: [], Original: "raw original" }] },
+			{ OriginalMsg: "metadata original" },
+			"chat",
+			"garbled",
+		),
+		"metadata original",
+	);
+	assert.equal(
+		extractOriginalMessage(
+			{ Type: "Chat", Dictionary: [{ Effects: [], Original: "raw original" }] },
+			{},
+			"chat",
+			"garbled",
+		),
+		"raw original",
+	);
+	assert.equal(
+		extractOriginalMessage(
+			{ Type: "Chat", Dictionary: [{ Effects: [] }] },
+			{},
+			"chat",
+			"garbled",
+		),
+		"",
+	);
+});
+
+test("extractOriginalMessage ignores identical or invalid originals", () => {
+	assert.equal(
+		extractOriginalMessage({ Type: "Chat" }, { OriginalMsg: "same" }, "chat", "same"),
+		"",
+	);
+	assert.equal(
+		extractOriginalMessage(
+			{ Type: "Chat", Dictionary: [{ Original: "missing effects" }] },
+			{},
+			"chat",
+			"garbled",
+		),
+		"",
+	);
+});
+
+test("message records keep WCE original text", () => {
+	const record = makeRecord({
+		data: {
+			Type: "Chat",
+			Sender: 1,
+			Dictionary: [{ Effects: [], Original: "Hello there" }],
+		},
+		sender: { MemberNumber: 1, Name: "Sender" },
+		msg: "Hlloo thre",
+		metadata: { MsgId: "c1" },
+		room: "Room A",
+		player: { MemberNumber: 9, Name: "Receiver" },
+	});
+	assert.equal(record.text, "Hlloo thre");
+	assert.equal(record.original, "Hello there");
+	assert.equal(record.uid, "9|1|c1");
 });
 
 test("formatDisplayMessage wraps actions", () => {

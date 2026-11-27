@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
-// @version      1.2.0
-// @description  One BC window, multiple accounts, unread feed, room follow/swap, settings, auto-reconnect, and message-log export by receiving PlayerID.
+// @version      1.2.1
+// @description  One BC window, multiple accounts, unread feed, room follow/swap, settings, auto-reconnect, and message-log export with WCE original text.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
 // @match        https://*.bondage-europe.com/R*/*
@@ -20,7 +20,7 @@
   var MAX_ACCOUNTS = 8;
   var FEED_MAX_LINES = 14;
   var SETTINGS_KEY = "bcma.settings";
-  var VERSION = "1.2.0";
+  var VERSION = "1.2.1";
 
   // src/core/input.js
   function readChildId() {
@@ -971,6 +971,29 @@ ${status}` + (acc.room ? `
     if (kind === "action" || kind === "activity") text = `(${text})`;
     return text;
   }
+  function extractOriginalMessage(data, metadata, kind, msg, sender) {
+    let raw = typeof metadata?.OriginalMsg === "string" && metadata.OriginalMsg.trim() ? metadata.OriginalMsg : "";
+    if (!raw && Array.isArray(data?.Dictionary)) {
+      const entry = data.Dictionary.find((item) => item && Array.isArray(item.Effects) && typeof item.Original === "string" && item.Original.trim() !== "");
+      raw = entry?.Original || "";
+    }
+    if (!raw) return "";
+    if (raw !== metadata?.OriginalMsg) {
+      try {
+        const extracted = window.ChatRoomMessageRunExtractors?.(data, sender);
+        const substitutions = extracted?.substitutions;
+        if (Array.isArray(substitutions) && typeof window.CommonStringSubstitute === "function") {
+          raw = window.CommonStringSubstitute(raw, substitutions);
+        }
+      } catch {
+      }
+    }
+    const original = formatDisplayMessage(kind, raw);
+    if (!original) return "";
+    const current = formatDisplayMessage(kind, msg);
+    if (!current || original === current) return "";
+    return original;
+  }
   function displayNameOf(sender) {
     if (!sender) return "";
     try {
@@ -1355,6 +1378,7 @@ ${status}` + (acc.room ? `
     const self = playerId === member && member !== 0;
     const msgid = metadata?.MsgId || messageId(data);
     const body = text.slice(0, maxChars);
+    const original = extractOriginalMessage(data, metadata, kind, msg, sender);
     return {
       // Include the receiving PlayerID so the same room message is stored once
       // per account instead of being overwritten by another recipient.
@@ -1371,6 +1395,7 @@ ${status}` + (acc.room ? `
       room: room || "",
       target: typeof data?.Target === "number" ? data.Target : null,
       text: body,
+      ...original ? { original: original.slice(0, maxChars) } : {},
       ts: now,
       day: dayKey(now),
       direction: self ? "out" : "in"
@@ -2078,7 +2103,12 @@ ${status}` + (acc.room ? `
       const percent = total > 0 ? account.count / total * 100 : 0;
       return `<span class="player-legend-item" title="${escapeHtml(account.name)}: ${account.count} \u6761 (${percent.toFixed(1)}%)"><i style="background:${account.color}"></i>${escapeHtml(account.name)} <b>${account.count}</b></span>`;
     }).join("");
-    const payload = JSON.stringify(records).replaceAll("<", "\\u003c");
+    const includeOriginal = meta.includeOriginal !== false;
+    const exportRecords = includeOriginal ? records : records.map((record) => {
+      const { original, ...rest } = record;
+      return rest;
+    });
+    const payload = JSON.stringify(exportRecords).replaceAll("<", "\\u003c");
     const title = meta.title || "BC Multi-Account \u6D88\u606F\u8BB0\u5F55";
     const source = meta.source || "";
     const range = meta.range || "";
@@ -2123,6 +2153,16 @@ main { padding: 10px 18px 30px; }
 .name.self { color: #86efac; }
 .kind { color: #c4b5fd; font-size: 12px; }
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.text-original {
+  margin-top: 3px;
+  padding-left: 7px;
+  border-left: 2px solid #34d399;
+  color: #a7f3d0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 @media (max-width: 760px) {
   .row { grid-template-columns: 96px minmax(0,1fr); }
   .room, .name, .kind { grid-column: 2; }
@@ -2153,6 +2193,7 @@ main { padding: 10px 18px 30px; }
 <script id="payload" type="application/json">${payload}<\/script>
 <script>
 const DATA = JSON.parse(document.getElementById("payload").textContent);
+const SHOW_ORIGINAL = ${includeOriginal ? "true" : "false"};
 const ACCOUNTS = ${JSON.stringify(accountList).replaceAll("<", "\\u003c")};
 const KIND_LABEL = ${JSON.stringify({
       chat: "\u804A\u5929",
@@ -2230,7 +2271,8 @@ function render() {
     if (current !== "all" && String(record.playerId) !== current) return false;
     if (!kindVisibleFor(record)) return false;
     if (!q) return true;
-    return [record.text, record.name, record.room, record.account, record.playerName].some(value => String(value || "").toLowerCase().includes(q));
+    return [record.text, SHOW_ORIGINAL ? record.original : "", record.name, record.room, record.account, record.playerName]
+      .some(value => String(value || "").toLowerCase().includes(q));
   });
   count.textContent = filtered.length + " \u6761" + (filtered.length === DATA.length ? "" : "\uFF08\u5171 " + DATA.length + " \u6761\uFF09");
   if (filtered.length === 0) {
@@ -2261,6 +2303,12 @@ function render() {
     const text = document.createElement("div");
     text.className = "text";
     text.textContent = record.text;
+    if (SHOW_ORIGINAL && record.original) {
+      const original = document.createElement("div");
+      original.className = "text-original";
+      original.textContent = "\u539F\u6587\uFF1A" + record.original;
+      text.appendChild(original);
+    }
     row.append(time, room, name, kind, text);
     rows.appendChild(row);
   }
@@ -2309,6 +2357,7 @@ render();
     let privateInput;
     let beepInput;
     let systemInput;
+    let originalInput;
     function makeCheck(labelText, checked = false) {
       const label = document.createElement("label");
       label.className = "bcma-log-check";
@@ -2378,7 +2427,9 @@ render();
       beepInput = beepCheck.input;
       const systemCheck = makeCheck("\u7CFB\u7EDF\u6D88\u606F", false);
       systemInput = systemCheck.input;
-      panel.append(privateCheck.label, beepCheck.label, systemCheck.label);
+      const originalCheck = makeCheck("\u5305\u542B WCE \u53CD\u6DF7\u6DC6\u539F\u6587", true);
+      originalInput = originalCheck.input;
+      panel.append(privateCheck.label, beepCheck.label, systemCheck.label, originalCheck.label);
       const footer = document.createElement("div");
       footer.className = "bcma-log-footer";
       const cancel = document.createElement("button");
@@ -2406,6 +2457,7 @@ render();
       privateInput.checked = true;
       beepInput.checked = true;
       systemInput.checked = false;
+      originalInput.checked = true;
       overlay.hidden = false;
     }
     function closeDialog() {
@@ -2431,7 +2483,8 @@ render();
         downloadExport(records, {
           title: "BC Multi-Account \u6D88\u606F\u8BB0\u5F55",
           source: source === "cache" ? "\u672C\u5730\u6D88\u606F\u7F13\u5B58" : "\u5F53\u524D\u4F1A\u8BDD\u6D88\u606F",
-          range: rangeText
+          range: rangeText,
+          includeOriginal: originalInput.checked
         });
         closeDialog();
       } catch (err) {

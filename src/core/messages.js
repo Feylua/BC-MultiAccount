@@ -88,6 +88,43 @@ export function formatDisplayMessage(kind, msg) {
 	return text;
 }
 
+export function extractOriginalMessage(data, metadata, kind, msg, sender) {
+	let raw = typeof metadata?.OriginalMsg === "string" && metadata.OriginalMsg.trim()
+		? metadata.OriginalMsg
+		: "";
+
+	if (!raw && Array.isArray(data?.Dictionary)) {
+		const entry = data.Dictionary.find((item) => (
+			item
+			&& Array.isArray(item.Effects)
+			&& typeof item.Original === "string"
+			&& item.Original.trim() !== ""
+		));
+		raw = entry?.Original || "";
+	}
+	if (!raw) return "";
+
+	// metadata.OriginalMsg is already substituted by BC. The raw dictionary value
+	// can still contain tags such as [Name], so try to resolve it the same way.
+	if (raw !== metadata?.OriginalMsg) {
+		try {
+			const extracted = window.ChatRoomMessageRunExtractors?.(data, sender);
+			const substitutions = extracted?.substitutions;
+			if (Array.isArray(substitutions) && typeof window.CommonStringSubstitute === "function") {
+				raw = window.CommonStringSubstitute(raw, substitutions);
+			}
+		} catch {
+			/* keep the unsubstituted original */
+		}
+	}
+
+	const original = formatDisplayMessage(kind, raw);
+	if (!original) return "";
+	const current = formatDisplayMessage(kind, msg);
+	if (!current || original === current) return "";
+	return original;
+}
+
 export function displayNameOf(sender) {
 	if (!sender) return "";
 	try {

@@ -23,6 +23,7 @@ export function createLogDialog({ logger }) {
 	let privateInput;
 	let beepInput;
 	let systemInput;
+	let originalInput;
 
 	function makeCheck(labelText, checked = false) {
 		const label = document.createElement("label");
@@ -100,7 +101,9 @@ export function createLogDialog({ logger }) {
 		beepInput = beepCheck.input;
 		const systemCheck = makeCheck("系统消息", false);
 		systemInput = systemCheck.input;
-		panel.append(privateCheck.label, beepCheck.label, systemCheck.label);
+		const originalCheck = makeCheck("包含 WCE 反混淆原文", true);
+		originalInput = originalCheck.input;
+		panel.append(privateCheck.label, beepCheck.label, systemCheck.label, originalCheck.label);
 
 		const footer = document.createElement("div");
 		footer.className = "bcma-log-footer";
@@ -131,6 +134,7 @@ export function createLogDialog({ logger }) {
 		privateInput.checked = true;
 		beepInput.checked = true;
 		systemInput.checked = false;
+		originalInput.checked = true;
 		overlay.hidden = false;
 	}
 
@@ -159,6 +163,7 @@ export function createLogDialog({ logger }) {
 				title: "BC Multi-Account 消息记录",
 				source: source === "cache" ? "本地消息缓存" : "当前会话消息",
 				range: rangeText,
+				includeOriginal: originalInput.checked,
 			});
 			closeDialog();
 		} catch (err) {

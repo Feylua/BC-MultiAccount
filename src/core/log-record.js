@@ -1,4 +1,4 @@
-import { classifyMessage, displayNameOf, formatDisplayMessage, messageId } from "./messages.js";
+import { classifyMessage, displayNameOf, extractOriginalMessage, formatDisplayMessage, messageId } from "./messages.js";
 import { parseBeepMessage, beepText } from "./beep.js";
 
 export function dayKey(ts) {
@@ -27,6 +27,7 @@ export function makeRecord({ data, sender, msg, metadata, room, player, maxChars
 	const self = playerId === member && member !== 0;
 	const msgid = metadata?.MsgId || messageId(data);
 	const body = text.slice(0, maxChars);
+	const original = extractOriginalMessage(data, metadata, kind, msg, sender);
 
 	return {
 		// Include the receiving PlayerID so the same room message is stored once
@@ -44,6 +45,7 @@ export function makeRecord({ data, sender, msg, metadata, room, player, maxChars
 		room: room || "",
 		target: typeof data?.Target === "number" ? data.Target : null,
 		text: body,
+		...(original ? { original: original.slice(0, maxChars) } : {}),
 		ts: now,
 		day: dayKey(now),
 		direction: self ? "out" : "in",

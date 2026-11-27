@@ -31,6 +31,20 @@ test("message rows include MM-DD before local time", () => {
 	assert.ok(html.includes('pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds())'));
 });
 
+test("export HTML renders and can strip WCE original text", () => {
+	const withOriginal = [{ ...records[0], original: "WCE_UNIQUE_ORIGINAL" }];
+	const included = generateExportHtml(withOriginal, { includeOriginal: true });
+	assert.ok(included.includes("WCE_UNIQUE_ORIGINAL"));
+	assert.ok(included.includes("text-original"));
+	assert.ok(included.includes("原文："));
+	assert.ok(included.includes("SHOW_ORIGINAL = true"));
+	assert.ok(included.includes("record.original"));
+
+	const excluded = generateExportHtml(withOriginal, { includeOriginal: false });
+	assert.ok(!excluded.includes("WCE_UNIQUE_ORIGINAL"));
+	assert.ok(excluded.includes("SHOW_ORIGINAL = false"));
+});
+
 test("player bar segment widths follow message counts", () => {
 	const many = Array.from({ length: 9 }, (_, index) => ({
 		uid: String(index),
