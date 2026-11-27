@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
-// @version      1.1.8
-// @description  One BC window, multiple logged-in accounts, unread feed, settings, auto-reconnect, and message-log export grouped by receiving PlayerID.
+// @version      1.2.0
+// @description  One BC window, multiple accounts, unread feed, room follow/swap, settings, auto-reconnect, and message-log export by receiving PlayerID.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
 // @match        https://*.bondage-europe.com/R*/*
@@ -20,7 +20,7 @@
   var MAX_ACCOUNTS = 8;
   var FEED_MAX_LINES = 14;
   var SETTINGS_KEY = "bcma.settings";
-  var VERSION = "1.1.8";
+  var VERSION = "1.2.0";
 
   // src/core/input.js
   function readChildId() {
@@ -53,7 +53,13 @@
     RATE_LIMITED: "rate-limited",
     RECONNECT_NOW: "reconnect-now",
     LOG_BATCH: "log-batch",
-    LOG_FLUSH: "log-flush"
+    LOG_FLUSH: "log-flush",
+    ROOM_STATE_REQUEST: "room-state-request",
+    ROOM_STATE: "room-state",
+    ROOM_JOIN: "room-join",
+    ROOM_JOIN_RESULT: "room-join-result",
+    ROOM_LEAVE: "room-leave",
+    ROOM_LEAVE_RESULT: "room-leave-result"
   });
 
   // src/core/account-info.js
@@ -71,11 +77,15 @@
     const account = loggedIn && p && typeof p.AccountName === "string" ? p.AccountName : "";
     const memberNumber = loggedIn && p && typeof p.MemberNumber === "number" ? p.MemberNumber : null;
     let room = "";
-    const inRoom = typeof window.ServerPlayerIsInChatRoom !== "function" || window.ServerPlayerIsInChatRoom();
+    let roomSpace = "";
+    let roomMemberCount = 0;
+    const inRoom = typeof window.ServerPlayerIsInChatRoom === "function" ? window.ServerPlayerIsInChatRoom() : false;
     if (loggedIn && inRoom && window.ChatRoomData && typeof window.ChatRoomData.Name === "string") {
       room = window.ChatRoomData.Name.trim();
+      roomSpace = typeof window.ChatRoomData.Space === "string" ? window.ChatRoomData.Space : "";
+      roomMemberCount = Array.isArray(window.ChatRoomData.Character) ? window.ChatRoomData.Character.length : Array.isArray(window.ChatRoomCharacter) ? window.ChatRoomCharacter.length : 0;
     }
-    return { loggedIn, online, name, account, memberNumber, room };
+    return { loggedIn, online, name, account, memberNumber, inRoom, room, roomSpace, roomMemberCount };
   }
 
   // src/core/audio.js
@@ -366,6 +376,7 @@
       feedSeen: /* @__PURE__ */ new Set(),
       feedRecent: /* @__PURE__ */ new Map(),
       feedOpen: false,
+      roomBusy: false,
       credentials: /* @__PURE__ */ new Map(),
       pausedUntil: 0,
       topAudio: null,
@@ -375,16 +386,6 @@
       logger: null,
       logDialog: null
     };
-  }
-
-  // src/core/room.js
-  function sameRoom(a, b) {
-    const left = String(a || "").trim();
-    const right = String(b || "").trim();
-    return left !== "" && right !== "" && left === right;
-  }
-  function isSameRoomChatOrAction(kind, room, activeRoom) {
-    return (kind === "chat" || kind === "action" || kind === "activity") && sameRoom(room, activeRoom);
   }
 
   // src/parent/feed.js
@@ -405,11 +406,10 @@
       }
     }
     function visibleEntries() {
-      const active = state.accounts.find((a) => a.key === state.activeKey);
       return state.feedMessages.filter((entry) => {
         if (!entry || typeof entry === "string") return true;
         if (entry.accountKey === state.activeKey) return false;
-        return !isSameRoomChatOrAction(entry.kind, entry.room, active?.room);
+        return true;
       });
     }
     function render() {
@@ -489,7 +489,7 @@
   }
 
   // src/parent/styles.css
-  var styles_default = '\n				#bcma-bar {\n					position: fixed;\n					top: 8px;\n					left: 50%;\n					transform: translateX(-50%);\n					z-index: 2147483647;\n					display: flex;\n					align-items: flex-start;\n					gap: 6px;\n					padding: 5px 7px;\n					box-sizing: border-box;\n					max-width: calc(100vw - 16px);\n					border: 1px solid rgba(255,255,255,0.14);\n					border-radius: 12px;\n					background: rgba(18,19,24,0.88);\n					box-shadow: 0 6px 24px rgba(0,0,0,0.35);\n					backdrop-filter: blur(8px);\n					font: 13px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;\n					color: #fff;\n					user-select: none;\n					pointer-events: auto;\n				}\n				#bcma-drag {\n					cursor: grab;\n					opacity: 0.55;\n					padding: 0 2px;\n					font-size: 16px;\n					line-height: 1;\n				}\n				#bcma-drag:active { cursor: grabbing; }\n				#bcma-list {\n					display: flex;\n					align-items: flex-start;\n					gap: 8px;\n					max-width: calc(100vw - 70px);\n					overflow-x: auto;\n					overflow-y: hidden;\n					scrollbar-width: thin;\n				}\n				.bcma-account {\n					display: flex;\n					flex-direction: column;\n					align-items: center;\n					gap: 3px;\n					min-width: 48px;\n					max-width: 76px;\n					flex: 0 0 auto;\n				}\n				.bcma-acc, .bcma-add {\n					appearance: none;\n					-webkit-appearance: none;\n					box-sizing: border-box;\n					margin: 0;\n					padding: 0;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 10px;\n					background: #2a2d34;\n					color: #fff;\n					cursor: pointer;\n					font: inherit;\n					outline: none;\n				}\n				.bcma-acc {\n					position: relative;\n					width: 40px;\n					height: 40px;\n					display: grid;\n					place-items: center;\n					transition: opacity 120ms ease, filter 120ms ease, background 120ms ease;\n				}\n				.bcma-acc:hover, .bcma-add:hover {\n					background: #3a3f49;\n					border-color: rgba(255,255,255,0.35);\n				}\n				.bcma-acc.active {\n					background: #1e3a5f;\n					border-color: #93c5fd;\n					box-shadow: 0 0 0 2px rgba(59,130,246,0.75);\n				}\n				.bcma-acc.online {\n					background: #2f3d33;\n					border-color: rgba(74,222,128,0.55);\n					box-shadow: 0 0 10px rgba(74,222,128,0.16);\n				}\n				.bcma-acc.active.online {\n					background: #1e3a5f;\n					border-color: #93c5fd;\n					box-shadow: 0 0 0 2px rgba(59,130,246,0.75), 0 0 12px rgba(74,222,128,0.2);\n				}\n				.bcma-acc.offline {\n					opacity: 0.38;\n					filter: grayscale(0.75);\n				}\n				.bcma-name, .bcma-room {\n					max-width: 76px;\n					overflow: hidden;\n					text-overflow: ellipsis;\n					white-space: nowrap;\n					text-align: center;\n					line-height: 1.2;\n				}\n				.bcma-name {\n					font-size: 11px;\n					font-weight: 600;\n					color: #e5e7eb;\n				}\n				.bcma-room {\n					font-size: 10px;\n					color: #93c5fd;\n				}\n				.bcma-name:empty, .bcma-room:empty {\n					display: none;\n				}\n				.bcma-account.offline .bcma-name,\n				.bcma-account.offline .bcma-room {\n					opacity: 0.55;\n				}\n				.bcma-add {\n					width: 32px;\n					height: 40px;\n					font-size: 20px;\n					line-height: 1;\n					color: #cbd5e1;\n					flex: 0 0 auto;\n				}\n				.bcma-frame {\n					position: fixed;\n					inset: 0;\n					width: 100%;\n					height: 100%;\n					border: 0;\n					background: #000;\n					z-index: 2147483000;\n				}\n\n				/* ===== v1.0.3 compact square tiles ===== */\n				#bcma-bar {\n					width: auto;\n					max-width: calc(100vw - 16px);\n					flex-direction: row;\n					align-items: flex-start;\n					gap: 6px;\n					padding: 5px 7px;\n				}\n				#bcma-drag {\n					text-align: left;\n					align-self: center;\n					padding: 0 2px;\n					font-size: 16px;\n				}\n				#bcma-list {\n					max-width: calc(100vw - 70px);\n					max-height: none;\n					flex-direction: row;\n					align-items: flex-start;\n					gap: 8px;\n					overflow-x: auto;\n					overflow-y: hidden;\n				}\n				.bcma-account {\n					position: relative;\n					width: 88px;\n					min-width: 88px;\n					max-width: 88px;\n					flex-direction: column;\n					align-items: center;\n					gap: 2px;\n					padding: 8px 0 0;\n					flex: 0 0 auto;\n				}\n				.bcma-close {\n					appearance: none;\n					-webkit-appearance: none;\n					box-sizing: border-box;\n					position: absolute;\n					left: 0;\n					top: 16px;\n					z-index: 3;\n					width: 24px;\n					min-width: 24px;\n					height: 24px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #9ca3af;\n					cursor: pointer;\n					font: 700 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				/* Enlarge the touch target without enlarging the visible X. */\n				.bcma-close::before {\n					content: "";\n					position: absolute;\n					inset: -5px;\n					border-radius: 9px;\n				}\n				.bcma-close:hover {\n					background: rgba(220, 38, 38, 0.18);\n					border-color: rgba(220, 38, 38, 0.55);\n					color: #fecaca;\n				}\n				.bcma-close.disabled {\n					opacity: 0.28;\n					cursor: not-allowed;\n				}\n				.bcma-close.disabled:hover {\n					background: transparent;\n					border-color: transparent;\n					color: #9ca3af;\n				}\n				.bcma-icon {\n					position: relative;\n					width: 40px;\n					height: 40px;\n					flex: 0 0 auto;\n					margin: 0 auto;\n				}\n				.bcma-acc {\n					width: 40px;\n					height: 40px;\n					min-width: 0;\n					flex: none;\n					display: grid;\n					place-items: center;\n					padding: 0;\n					overflow: visible;\n				}\n				.bcma-avatar {\n					font-weight: 700;\n					font-size: 14px;\n					line-height: 1;\n				}\n				.bcma-name {\n					width: 84px;\n					max-width: 84px;\n					font-size: 11px;\n					font-weight: 600;\n					line-height: 1.2;\n					text-align: center;\n					color: #e5e7eb;\n				}\n				.bcma-room {\n					width: 84px;\n					max-width: 84px;\n					font-size: 9px;\n					line-height: 1.2;\n					text-align: center;\n					color: #93c5fd;\n				}\n				.bcma-unread {\n					position: absolute;\n					top: -6px;\n					right: -6px;\n					min-width: 16px;\n					height: 16px;\n					padding: 0 4px;\n					box-sizing: content-box;\n					border-radius: 8px;\n					background: #6b7280;\n					color: #fff;\n					font: 700 10px/16px system-ui, -apple-system, "Segoe UI", sans-serif;\n					text-align: center;\n					white-space: nowrap;\n					box-shadow: 0 0 0 2px #141418;\n					pointer-events: none;\n				}\n				.bcma-unread.chat { background: #2563eb; }\n				.bcma-unread.whisper { background: #dc2626; }\n				.bcma-unread.muted { background: #6b7280; }\n				.bcma-unread.empty {\n					visibility: hidden;\n				}\n				.bcma-add {\n					width: 32px;\n					height: 32px;\n					margin: 12px 0 0;\n					font-size: 20px;\n					align-self: flex-start;\n					flex: 0 0 auto;\n				}\n\n				/* ===== v1.0.4 background-message feed ===== */\n				#bcma-feed-toggle {\n					appearance: none;\n					-webkit-appearance: none;\n					position: absolute;\n					left: 50%;\n					bottom: -15px;\n					transform: translateX(-50%);\n					z-index: 5;\n					width: 52px;\n					height: 16px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-top: 0;\n					border-radius: 0 0 8px 8px;\n					background: rgba(0,0,0,0.72);\n					color: #e5e7eb;\n					cursor: pointer;\n					font: 700 10px/12px system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-feed-toggle:hover {\n					background: rgba(20,20,24,0.9);\n					color: #fff;\n				}\n				#bcma-feed {\n					position: absolute;\n					top: calc(100% + 17px);\n					left: 0;\n					z-index: 4;\n					width: 22em;\n					height: 19.6em; /* 14 lines at line-height 1.4 */\n					padding: 4px 6px;\n					box-sizing: content-box;\n					overflow: hidden;\n					border: 1px solid rgba(255,255,255,0.16);\n					border-radius: 10px;\n					background: rgba(0,0,0,0.72);\n					backdrop-filter: blur(5px);\n					color: #fff;\n					font-size: 11px;\n					line-height: 1.4;\n					text-align: left;\n					pointer-events: auto;\n				}\n				#bcma-feed[hidden] {\n					display: none;\n				}\n				.bcma-feed-line {\n					height: 1.4em;\n					line-height: 1.4;\n					white-space: nowrap;\n					overflow: hidden;\n					text-overflow: ellipsis;\n				}\n			\n\n				/* ===== v1.1.1 settings ===== */\n				#bcma-settings {\n					appearance: none;\n					-webkit-appearance: none;\n					position: absolute;\n					right: 4px;\n					bottom: 0;\n					z-index: 6;\n					width: 18px;\n					height: 18px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #9ca3af;\n					cursor: pointer;\n					font: 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-settings:hover {\n					background: rgba(255,255,255,0.1);\n					border-color: rgba(255,255,255,0.25);\n					color: #fff;\n				}\n				#bcma-settings-overlay {\n					position: fixed;\n					inset: 0;\n					z-index: 2147483647;\n					display: grid;\n					place-items: center;\n					background: rgba(0,0,0,0.45);\n					pointer-events: auto;\n				}\n				#bcma-settings-overlay[hidden] {\n					display: none;\n				}\n				#bcma-settings-panel {\n					width: 310px;\n					max-width: calc(100vw - 24px);\n					max-height: calc(100vh - 24px);\n					overflow-y: auto;\n					box-sizing: border-box;\n					padding: 10px 12px 12px;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 12px;\n					background: rgba(0,0,0,0.86);\n					box-shadow: 0 10px 40px rgba(0,0,0,0.5);\n					backdrop-filter: blur(8px);\n					color: #fff;\n					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-settings-header {\n					display: flex;\n					align-items: center;\n					justify-content: space-between;\n					gap: 8px;\n					margin-bottom: 10px;\n				}\n				.bcma-settings-title {\n					margin: 0;\n					font-size: 16px;\n					font-weight: 700;\n					color: #fff;\n				}\n				#bcma-settings-close {\n					appearance: none;\n					-webkit-appearance: none;\n					width: 26px;\n					height: 26px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #d1d5db;\n					cursor: pointer;\n					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-settings-close:hover {\n					background: rgba(220,38,38,0.2);\n					border-color: rgba(220,38,38,0.55);\n					color: #fecaca;\n				}\n				.bcma-settings-check {\n					display: flex;\n					align-items: center;\n					gap: 7px;\n					margin-bottom: 12px;\n					cursor: pointer;\n				}\n				.bcma-settings-check input {\n					accent-color: #3b82f6;\n				}\n				.bcma-settings-section-title {\n					margin: 0 0 7px;\n					padding-top: 9px;\n					border-top: 1px solid rgba(255,255,255,0.14);\n					font-size: 13px;\n					font-weight: 700;\n					color: #e5e7eb;\n				}\n				.bcma-settings-sound {\n					margin-bottom: 9px;\n				}\n				.bcma-settings-sound-title {\n					margin-bottom: 5px;\n					color: #93c5fd;\n					font-size: 12px;\n					font-weight: 600;\n				}\n				.bcma-settings-radio {\n					display: flex;\n					align-items: center;\n					gap: 6px;\n					margin: 3px 0;\n					cursor: pointer;\n				}\n				.bcma-settings-radio input {\n					accent-color: #3b82f6;\n				}\n\n				/* ===== v1.1.2 draggable settings + log export ===== */\n				#bcma-settings-panel {\n					position: absolute;\n					left: 50%;\n					top: 50%;\n					transform: translate(-50%, -50%);\n					margin: 0;\n				}\n				.bcma-settings-header {\n					cursor: grab;\n					user-select: none;\n					touch-action: none;\n				}\n				.bcma-settings-header:active {\n					cursor: grabbing;\n				}\n				.bcma-settings-log-info {\n					margin: 2px 0 8px;\n					padding: 6px 8px;\n					border: 1px solid rgba(255,255,255,0.1);\n					border-radius: 8px;\n					background: rgba(255,255,255,0.035);\n					font-size: 12px;\n					color: #cbd5e1;\n				}\n				.bcma-settings-log-row {\n					display: flex;\n					justify-content: space-between;\n					gap: 10px;\n					line-height: 1.6;\n				}\n				.bcma-settings-log-value {\n					color: #93c5fd;\n					text-align: right;\n					overflow: hidden;\n					text-overflow: ellipsis;\n					white-space: nowrap;\n				}\n				.bcma-settings-actions {\n					display: flex;\n					flex-wrap: wrap;\n					gap: 6px;\n					margin-top: 2px;\n				}\n				.bcma-settings-button,\n				.bcma-log-btn {\n					appearance: none;\n					-webkit-appearance: none;\n					margin: 0;\n					padding: 6px 9px;\n					border: 1px solid rgba(255,255,255,0.2);\n					border-radius: 7px;\n					background: #2a2d34;\n					color: #e5e7eb;\n					cursor: pointer;\n					font: 12px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-settings-button:hover,\n				.bcma-log-btn:hover {\n					background: #3a3f49;\n					border-color: rgba(255,255,255,0.35);\n				}\n				.bcma-settings-button.primary,\n				.bcma-log-btn.primary {\n					background: #1e3a5f;\n					border-color: #60a5fa;\n					color: #fff;\n				}\n				#bcma-log-overlay {\n					position: fixed;\n					inset: 0;\n					z-index: 2147483647;\n					display: grid;\n					place-items: center;\n					background: rgba(0,0,0,0.45);\n					pointer-events: auto;\n				}\n				#bcma-log-overlay[hidden] {\n					display: none;\n				}\n				#bcma-log-panel {\n					width: 340px;\n					max-width: calc(100vw - 24px);\n					max-height: calc(100vh - 24px);\n					overflow-y: auto;\n					box-sizing: border-box;\n					padding: 10px 12px 12px;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 12px;\n					background: rgba(0,0,0,0.88);\n					box-shadow: 0 10px 40px rgba(0,0,0,0.5);\n					backdrop-filter: blur(8px);\n					color: #fff;\n					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-log-header {\n					display: flex;\n					align-items: center;\n					justify-content: space-between;\n					gap: 8px;\n					margin-bottom: 6px;\n				}\n				.bcma-log-title {\n					margin: 0;\n					font-size: 16px;\n					font-weight: 700;\n				}\n				#bcma-log-close {\n					appearance: none;\n					-webkit-appearance: none;\n					width: 26px;\n					height: 26px;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #d1d5db;\n					cursor: pointer;\n					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				#bcma-log-close:hover {\n					background: rgba(220,38,38,0.2);\n					border-color: rgba(220,38,38,0.55);\n					color: #fecaca;\n				}\n				.bcma-log-source {\n					margin-bottom: 10px;\n					color: #93c5fd;\n					font-size: 12px;\n				}\n				.bcma-log-field {\n					margin-bottom: 8px;\n				}\n				.bcma-log-field[hidden] {\n					display: none;\n				}\n				.bcma-log-field-title {\n					margin: 8px 0 4px;\n					color: #e5e7eb;\n					font-size: 12px;\n					font-weight: 700;\n				}\n				.bcma-log-inline {\n					display: flex;\n					flex-wrap: wrap;\n					gap: 10px;\n				}\n				.bcma-log-check {\n					display: flex;\n					align-items: center;\n					gap: 6px;\n					margin: 4px 0;\n					cursor: pointer;\n				}\n				.bcma-log-check input {\n					accent-color: #3b82f6;\n				}\n				.bcma-log-footer {\n					display: flex;\n					justify-content: flex-end;\n					gap: 7px;\n					margin-top: 12px;\n				}\r\n\n				#bcma-settings-overlay:not([hidden]) {\n					display: block;\n				}\r\n';
+  var styles_default = '\n				#bcma-bar {\n					position: fixed;\n					top: 8px;\n					left: 50%;\n					transform: translateX(-50%);\n					z-index: 2147483647;\n					display: flex;\n					align-items: flex-start;\n					gap: 6px;\n					padding: 5px 7px;\n					box-sizing: border-box;\n					max-width: calc(100vw - 16px);\n					border: 1px solid rgba(255,255,255,0.14);\n					border-radius: 12px;\n					background: rgba(18,19,24,0.88);\n					box-shadow: 0 6px 24px rgba(0,0,0,0.35);\n					backdrop-filter: blur(8px);\n					font: 13px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;\n					color: #fff;\n					user-select: none;\n					pointer-events: auto;\n				}\n				#bcma-drag {\n					cursor: grab;\n					opacity: 0.55;\n					padding: 0 2px;\n					font-size: 16px;\n					line-height: 1;\n				}\n				#bcma-drag:active { cursor: grabbing; }\n				#bcma-list {\n					display: flex;\n					align-items: flex-start;\n					gap: 8px;\n					max-width: calc(100vw - 70px);\n					overflow-x: auto;\n					overflow-y: hidden;\n					scrollbar-width: thin;\n				}\n				.bcma-account {\n					display: flex;\n					flex-direction: column;\n					align-items: center;\n					gap: 3px;\n					min-width: 48px;\n					max-width: 76px;\n					flex: 0 0 auto;\n				}\n				.bcma-acc, .bcma-add {\n					appearance: none;\n					-webkit-appearance: none;\n					box-sizing: border-box;\n					margin: 0;\n					padding: 0;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 10px;\n					background: #2a2d34;\n					color: #fff;\n					cursor: pointer;\n					font: inherit;\n					outline: none;\n				}\n				.bcma-acc {\n					position: relative;\n					width: 40px;\n					height: 40px;\n					display: grid;\n					place-items: center;\n					transition: opacity 120ms ease, filter 120ms ease, background 120ms ease;\n				}\n				.bcma-acc:hover, .bcma-add:hover {\n					background: #3a3f49;\n					border-color: rgba(255,255,255,0.35);\n				}\n				.bcma-acc.active {\n					background: #1e3a5f;\n					border-color: #93c5fd;\n					box-shadow: 0 0 0 2px rgba(59,130,246,0.75);\n				}\n				.bcma-acc.online {\n					background: #2f3d33;\n					border-color: rgba(74,222,128,0.55);\n					box-shadow: 0 0 10px rgba(74,222,128,0.16);\n				}\n				.bcma-acc.active.online {\n					background: #1e3a5f;\n					border-color: #93c5fd;\n					box-shadow: 0 0 0 2px rgba(59,130,246,0.75), 0 0 12px rgba(74,222,128,0.2);\n				}\n				.bcma-acc.offline {\n					opacity: 0.38;\n					filter: grayscale(0.75);\n				}\n				.bcma-name, .bcma-room {\n					max-width: 76px;\n					overflow: hidden;\n					text-overflow: ellipsis;\n					white-space: nowrap;\n					text-align: center;\n					line-height: 1.2;\n				}\n				.bcma-name {\n					font-size: 11px;\n					font-weight: 600;\n					color: #e5e7eb;\n				}\n				.bcma-room {\n					font-size: 10px;\n					color: #93c5fd;\n				}\n				.bcma-name:empty, .bcma-room:empty {\n					display: none;\n				}\n				.bcma-account.offline .bcma-name,\n				.bcma-account.offline .bcma-room {\n					opacity: 0.55;\n				}\n				.bcma-add {\n					width: 32px;\n					height: 40px;\n					font-size: 20px;\n					line-height: 1;\n					color: #cbd5e1;\n					flex: 0 0 auto;\n				}\n				.bcma-frame {\n					position: fixed;\n					inset: 0;\n					width: 100%;\n					height: 100%;\n					border: 0;\n					background: #000;\n					z-index: 2147483000;\n				}\n\n				/* ===== v1.0.3 compact square tiles ===== */\n				#bcma-bar {\n					width: auto;\n					max-width: calc(100vw - 16px);\n					flex-direction: row;\n					align-items: flex-start;\n					gap: 6px;\n					padding: 5px 7px;\n				}\n				#bcma-drag {\n					text-align: left;\n					align-self: center;\n					padding: 0 2px;\n					font-size: 16px;\n				}\n				#bcma-list {\n					max-width: calc(100vw - 70px);\n					max-height: none;\n					flex-direction: row;\n					align-items: flex-start;\n					gap: 8px;\n					overflow-x: auto;\n					overflow-y: hidden;\n				}\n				.bcma-account {\n					position: relative;\n					width: 88px;\n					min-width: 88px;\n					max-width: 88px;\n					flex-direction: column;\n					align-items: center;\n					gap: 2px;\n					padding: 8px 0 0;\n					flex: 0 0 auto;\n				}\n				.bcma-close {\n					appearance: none;\n					-webkit-appearance: none;\n					box-sizing: border-box;\n					position: absolute;\n					left: 0;\n					top: 16px;\n					z-index: 3;\n					width: 24px;\n					min-width: 24px;\n					height: 24px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #9ca3af;\n					cursor: pointer;\n					font: 700 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				/* Enlarge the touch target without enlarging the visible X. */\n				.bcma-close::before {\n					content: "";\n					position: absolute;\n					inset: -5px;\n					border-radius: 9px;\n				}\n				.bcma-close:hover {\n					background: rgba(220, 38, 38, 0.18);\n					border-color: rgba(220, 38, 38, 0.55);\n					color: #fecaca;\n				}\n				.bcma-close.disabled {\n					opacity: 0.28;\n					cursor: not-allowed;\n				}\n				.bcma-close.disabled:hover {\n					background: transparent;\n					border-color: transparent;\n					color: #9ca3af;\n				}\n				.bcma-icon {\n					position: relative;\n					width: 40px;\n					height: 40px;\n					flex: 0 0 auto;\n					margin: 0 auto;\n				}\n				.bcma-acc {\n					width: 40px;\n					height: 40px;\n					min-width: 0;\n					flex: none;\n					display: grid;\n					place-items: center;\n					padding: 0;\n					overflow: visible;\n				}\n				.bcma-avatar {\n					font-weight: 700;\n					font-size: 14px;\n					line-height: 1;\n				}\n				.bcma-name {\n					width: 84px;\n					max-width: 84px;\n					font-size: 11px;\n					font-weight: 600;\n					line-height: 1.2;\n					text-align: center;\n					color: #e5e7eb;\n				}\n				.bcma-room {\n					width: 84px;\n					max-width: 84px;\n					font-size: 9px;\n					line-height: 1.2;\n					text-align: center;\n					color: #93c5fd;\n				}\n				.bcma-unread {\n					position: absolute;\n					top: -6px;\n					right: -6px;\n					min-width: 16px;\n					height: 16px;\n					padding: 0 4px;\n					box-sizing: content-box;\n					border-radius: 8px;\n					background: #6b7280;\n					color: #fff;\n					font: 700 10px/16px system-ui, -apple-system, "Segoe UI", sans-serif;\n					text-align: center;\n					white-space: nowrap;\n					box-shadow: 0 0 0 2px #141418;\n					pointer-events: none;\n				}\n				.bcma-unread.chat { background: #2563eb; }\n				.bcma-unread.whisper { background: #dc2626; }\n				.bcma-unread.muted { background: #6b7280; }\n				.bcma-unread.empty {\n					visibility: hidden;\n				}\n				.bcma-add {\n					width: 32px;\n					height: 32px;\n					margin: 12px 0 0;\n					font-size: 20px;\n					align-self: flex-start;\n					flex: 0 0 auto;\n				}\n\n				/* ===== v1.0.4 background-message feed ===== */\n				#bcma-feed-toggle {\n					appearance: none;\n					-webkit-appearance: none;\n					position: absolute;\n					left: 50%;\n					bottom: -15px;\n					transform: translateX(-50%);\n					z-index: 5;\n					width: 52px;\n					height: 16px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-top: 0;\n					border-radius: 0 0 8px 8px;\n					background: rgba(0,0,0,0.72);\n					color: #e5e7eb;\n					cursor: pointer;\n					font: 700 10px/12px system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-feed-toggle:hover {\n					background: rgba(20,20,24,0.9);\n					color: #fff;\n				}\n				#bcma-feed {\n					position: absolute;\n					top: calc(100% + 17px);\n					left: 0;\n					z-index: 4;\n					width: 22em;\n					height: 19.6em; /* 14 lines at line-height 1.4 */\n					padding: 4px 6px;\n					box-sizing: content-box;\n					overflow: hidden;\n					border: 1px solid rgba(255,255,255,0.16);\n					border-radius: 10px;\n					background: rgba(0,0,0,0.72);\n					backdrop-filter: blur(5px);\n					color: #fff;\n					font-size: 11px;\n					line-height: 1.4;\n					text-align: left;\n					pointer-events: auto;\n				}\n				#bcma-feed[hidden] {\n					display: none;\n				}\n				.bcma-feed-line {\n					height: 1.4em;\n					line-height: 1.4;\n					white-space: nowrap;\n					overflow: hidden;\n					text-overflow: ellipsis;\n				}\n			\n\n				/* ===== v1.1.1 settings ===== */\n				#bcma-settings {\n					appearance: none;\n					-webkit-appearance: none;\n					position: absolute;\n					right: 4px;\n					bottom: 0;\n					z-index: 6;\n					width: 18px;\n					height: 18px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #9ca3af;\n					cursor: pointer;\n					font: 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-settings:hover {\n					background: rgba(255,255,255,0.1);\n					border-color: rgba(255,255,255,0.25);\n					color: #fff;\n				}\n				#bcma-settings-overlay {\n					position: fixed;\n					inset: 0;\n					z-index: 2147483647;\n					display: grid;\n					place-items: center;\n					background: rgba(0,0,0,0.45);\n					pointer-events: auto;\n				}\n				#bcma-settings-overlay[hidden] {\n					display: none;\n				}\n				#bcma-settings-panel {\n					width: 310px;\n					max-width: calc(100vw - 24px);\n					max-height: calc(100vh - 24px);\n					overflow-y: auto;\n					box-sizing: border-box;\n					padding: 10px 12px 12px;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 12px;\n					background: rgba(0,0,0,0.86);\n					box-shadow: 0 10px 40px rgba(0,0,0,0.5);\n					backdrop-filter: blur(8px);\n					color: #fff;\n					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-settings-header {\n					display: flex;\n					align-items: center;\n					justify-content: space-between;\n					gap: 8px;\n					margin-bottom: 10px;\n				}\n				.bcma-settings-title {\n					margin: 0;\n					font-size: 16px;\n					font-weight: 700;\n					color: #fff;\n				}\n				#bcma-settings-close {\n					appearance: none;\n					-webkit-appearance: none;\n					width: 26px;\n					height: 26px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #d1d5db;\n					cursor: pointer;\n					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				#bcma-settings-close:hover {\n					background: rgba(220,38,38,0.2);\n					border-color: rgba(220,38,38,0.55);\n					color: #fecaca;\n				}\n				.bcma-settings-check {\n					display: flex;\n					align-items: center;\n					gap: 7px;\n					margin-bottom: 12px;\n					cursor: pointer;\n				}\n				.bcma-settings-check input {\n					accent-color: #3b82f6;\n				}\n				.bcma-settings-section-title {\n					margin: 0 0 7px;\n					padding-top: 9px;\n					border-top: 1px solid rgba(255,255,255,0.14);\n					font-size: 13px;\n					font-weight: 700;\n					color: #e5e7eb;\n				}\n				.bcma-settings-sound {\n					margin-bottom: 9px;\n				}\n				.bcma-settings-sound-title {\n					margin-bottom: 5px;\n					color: #93c5fd;\n					font-size: 12px;\n					font-weight: 600;\n				}\n				.bcma-settings-radio {\n					display: flex;\n					align-items: center;\n					gap: 6px;\n					margin: 3px 0;\n					cursor: pointer;\n				}\n				.bcma-settings-radio input {\n					accent-color: #3b82f6;\n				}\n\n				/* ===== v1.1.2 draggable settings + log export ===== */\n				#bcma-settings-panel {\n					position: absolute;\n					left: 50%;\n					top: 50%;\n					transform: translate(-50%, -50%);\n					margin: 0;\n				}\n				.bcma-settings-header {\n					cursor: grab;\n					user-select: none;\n					touch-action: none;\n				}\n				.bcma-settings-header:active {\n					cursor: grabbing;\n				}\n				.bcma-settings-log-info {\n					margin: 2px 0 8px;\n					padding: 6px 8px;\n					border: 1px solid rgba(255,255,255,0.1);\n					border-radius: 8px;\n					background: rgba(255,255,255,0.035);\n					font-size: 12px;\n					color: #cbd5e1;\n				}\n				.bcma-settings-log-row {\n					display: flex;\n					justify-content: space-between;\n					gap: 10px;\n					line-height: 1.6;\n				}\n				.bcma-settings-log-value {\n					color: #93c5fd;\n					text-align: right;\n					overflow: hidden;\n					text-overflow: ellipsis;\n					white-space: nowrap;\n				}\n				.bcma-settings-actions {\n					display: flex;\n					flex-wrap: wrap;\n					gap: 6px;\n					margin-top: 2px;\n				}\n				.bcma-settings-button,\n				.bcma-log-btn {\n					appearance: none;\n					-webkit-appearance: none;\n					margin: 0;\n					padding: 6px 9px;\n					border: 1px solid rgba(255,255,255,0.2);\n					border-radius: 7px;\n					background: #2a2d34;\n					color: #e5e7eb;\n					cursor: pointer;\n					font: 12px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-settings-button:hover,\n				.bcma-log-btn:hover {\n					background: #3a3f49;\n					border-color: rgba(255,255,255,0.35);\n				}\n				.bcma-settings-button.primary,\n				.bcma-log-btn.primary {\n					background: #1e3a5f;\n					border-color: #60a5fa;\n					color: #fff;\n				}\n				#bcma-log-overlay {\n					position: fixed;\n					inset: 0;\n					z-index: 2147483647;\n					display: grid;\n					place-items: center;\n					background: rgba(0,0,0,0.45);\n					pointer-events: auto;\n				}\n				#bcma-log-overlay[hidden] {\n					display: none;\n				}\n				#bcma-log-panel {\n					width: 340px;\n					max-width: calc(100vw - 24px);\n					max-height: calc(100vh - 24px);\n					overflow-y: auto;\n					box-sizing: border-box;\n					padding: 10px 12px 12px;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 12px;\n					background: rgba(0,0,0,0.88);\n					box-shadow: 0 10px 40px rgba(0,0,0,0.5);\n					backdrop-filter: blur(8px);\n					color: #fff;\n					font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				.bcma-log-header {\n					display: flex;\n					align-items: center;\n					justify-content: space-between;\n					gap: 8px;\n					margin-bottom: 6px;\n				}\n				.bcma-log-title {\n					margin: 0;\n					font-size: 16px;\n					font-weight: 700;\n				}\n				#bcma-log-close {\n					appearance: none;\n					-webkit-appearance: none;\n					width: 26px;\n					height: 26px;\n					padding: 0;\n					border: 1px solid transparent;\n					border-radius: 6px;\n					background: transparent;\n					color: #d1d5db;\n					cursor: pointer;\n					font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n				}\n				#bcma-log-close:hover {\n					background: rgba(220,38,38,0.2);\n					border-color: rgba(220,38,38,0.55);\n					color: #fecaca;\n				}\n				.bcma-log-source {\n					margin-bottom: 10px;\n					color: #93c5fd;\n					font-size: 12px;\n				}\n				.bcma-log-field {\n					margin-bottom: 8px;\n				}\n				.bcma-log-field[hidden] {\n					display: none;\n				}\n				.bcma-log-field-title {\n					margin: 8px 0 4px;\n					color: #e5e7eb;\n					font-size: 12px;\n					font-weight: 700;\n				}\n				.bcma-log-inline {\n					display: flex;\n					flex-wrap: wrap;\n					gap: 10px;\n				}\n				.bcma-log-check {\n					display: flex;\n					align-items: center;\n					gap: 6px;\n					margin: 4px 0;\n					cursor: pointer;\n				}\n				.bcma-log-check input {\n					accent-color: #3b82f6;\n				}\n				.bcma-log-footer {\n					display: flex;\n					justify-content: flex-end;\n					gap: 7px;\n					margin-top: 12px;\n				}\r\n\n				#bcma-settings-overlay:not([hidden]) {\n					display: block;\n				}\r\n\n				/* ===== v1.2.0 room actions ===== */\n				.bcma-room-actions {\n					position: absolute;\n					bottom: 1px;\n					left: 50%;\n					z-index: 6;\n					display: flex;\n					gap: 3px;\n					padding: 2px;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 6px;\n					background: rgba(0,0,0,0.86);\n					box-shadow: 0 2px 10px rgba(0,0,0,0.45);\n					transform: translateX(-50%) translateY(3px);\n					opacity: 0;\n					visibility: hidden;\n					pointer-events: none;\n					transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;\n				}\n				.bcma-account:hover .bcma-room-actions,\n				.bcma-account:focus-within .bcma-room-actions {\n					opacity: 1;\n					visibility: visible;\n					pointer-events: auto;\n					transform: translateX(-50%) translateY(0);\n				}\n				.bcma-room-action {\n					appearance: none;\n					-webkit-appearance: none;\n					width: 20px;\n					height: 20px;\n					margin: 0;\n					padding: 0;\n					border: 1px solid rgba(255,255,255,0.18);\n					border-radius: 5px;\n					background: #2a2d34;\n					color: #e5e7eb;\n					cursor: pointer;\n					font: 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif;\n					outline: none;\n				}\n				.bcma-room-action:hover {\n					background: #3b82f6;\n					border-color: #93c5fd;\n					color: #fff;\n				}\n				.bcma-room-action:disabled {\n					opacity: 0.45;\n					cursor: wait;\n				}\n				@media (hover: none) {\n					.bcma-room-actions {\n						opacity: 1;\n						visibility: visible;\n						pointer-events: auto;\n						transform: translateX(-50%) translateY(0);\n					}\n				}\r\n';
 
   // src/parent/toolbar.js
   function createToolbar({ state, feed, handlers }) {
@@ -630,6 +630,37 @@ ${status}` + (acc.room ? `
         room.textContent = acc.room;
         wrap.appendChild(room);
       }
+      const canFollow = acc.key !== state.activeKey && handlers.canFollow?.(acc);
+      const canSwap = acc.key !== state.activeKey && handlers.canSwap?.(acc);
+      if (canFollow) {
+        const actions = document.createElement("div");
+        actions.className = "bcma-room-actions";
+        actions.addEventListener("click", (event) => event.stopPropagation());
+        const follow = document.createElement("button");
+        follow.type = "button";
+        follow.className = "bcma-room-action";
+        follow.textContent = "\u21AA";
+        follow.title = `\u5F53\u524D\u8D26\u53F7\u8FDB\u5165 ${acc.room}`;
+        follow.addEventListener("click", (event) => {
+          event.stopPropagation();
+          handlers.onFollow?.(acc);
+        });
+        actions.appendChild(follow);
+        if (canSwap) {
+          const swap = document.createElement("button");
+          swap.type = "button";
+          swap.className = "bcma-room-action";
+          swap.textContent = "\u21C4";
+          const active = state.accounts.find((a) => a.key === state.activeKey);
+          swap.title = active && !active.inRoom ? `\u524D\u53F0\u8FDB\u5165\u8BE5\u623F\u95F4\uFF0C\u5E76\u8BA9 ${label} \u79BB\u5F00\uFF08\u5F53\u524D\u8D26\u53F7\u5728\u5927\u5385\uFF09` : `\u4EA4\u6362\u4E24\u4E2A\u8D26\u53F7\u7684\u623F\u95F4\uFF1A${acc.room}`;
+          swap.addEventListener("click", (event) => {
+            event.stopPropagation();
+            handlers.onSwap?.(acc);
+          });
+          actions.appendChild(swap);
+        }
+        wrap.appendChild(actions);
+      }
       return wrap;
     }
     function buildAddButton() {
@@ -713,7 +744,10 @@ ${status}` + (acc.room ? `
       if (typeof info.account === "string") acc.account = info.account;
       if (typeof info.memberNumber === "number") acc.member = info.memberNumber;
       else if (info.memberNumber === null) acc.member = null;
+      if (typeof info.inRoom === "boolean") acc.inRoom = info.inRoom;
       if (typeof info.room === "string") acc.room = info.room;
+      if (typeof info.roomSpace === "string") acc.roomSpace = info.roomSpace;
+      if (typeof info.roomMemberCount === "number") acc.roomMemberCount = info.roomMemberCount;
     }
     function clearUnread(acc) {
       if (!acc) return;
@@ -791,7 +825,10 @@ ${status}` + (acc.room ? `
         member: null,
         loggedIn: false,
         online: false,
+        inRoom: false,
         room: "",
+        roomSpace: "",
+        roomMemberCount: 0,
         ready: false,
         unread: emptyUnread()
       };
@@ -837,7 +874,10 @@ ${status}` + (acc.room ? `
         member: null,
         loggedIn: false,
         online: false,
+        inRoom: false,
         room: "",
+        roomSpace: "",
+        roomMemberCount: 0,
         ready: true,
         unread: emptyUnread()
       });
@@ -964,45 +1004,42 @@ ${status}` + (acc.room ? `
     report(kind, text, messageRoom(), id, Number(data?.Sender) || 0);
   }
 
+  // src/core/room.js
+  function sameRoom(a, b) {
+    const left = String(a || "").trim();
+    const right = String(b || "").trim();
+    return left !== "" && right !== "" && left === right;
+  }
+  function isSameRoomChatOrAction(kind, room, activeRoom) {
+    return (kind === "chat" || kind === "action" || kind === "activity") && sameRoom(room, activeRoom);
+  }
+
   // src/parent/bridge.js
-  function createParentBridge({ state, accounts, feed, scheduleRender, configureAccount, logger }) {
+  function createParentBridge({ state, accounts, feed, scheduleRender, configureAccount, logger, roomCoordinator }) {
     function listen() {
       window.addEventListener("message", (event) => {
         const data = event.data;
         if (!data || data.channel !== CHANNEL) return;
         const acc = state.accounts.find((a) => a.frame && a.frame.contentWindow === event.source);
         if (!acc) return;
+        if (roomCoordinator?.handleMessage(acc, data)) return;
         switch (data.type) {
           case MSG.READY: {
             acc.ready = true;
-            const previousRoom = acc.room;
             accounts.applyInfo(acc, data);
             accounts.clearUnread(acc);
             configureAccount?.(acc);
             accounts.postTo(acc, { type: MSG.SET_ACTIVE, active: acc.key === state.activeKey });
             if (acc.key === state.activeKey) {
               accounts.requestScrollBottom(acc);
-              if (previousRoom !== acc.room) {
-                feed.clearRoom(previousRoom);
-                feed.clearRoom(acc.room);
-              } else {
-                feed.render();
-              }
+              feed.render();
             }
             scheduleRender();
             break;
           }
           case MSG.ACCOUNT: {
-            const previousRoom = acc.room;
             accounts.applyInfo(acc, data);
-            if (acc.key === state.activeKey) {
-              if (previousRoom !== acc.room) {
-                feed.clearRoom(previousRoom);
-                feed.clearRoom(acc.room);
-              } else {
-                feed.render();
-              }
-            }
+            if (acc.key === state.activeKey) feed.render();
             scheduleRender();
             break;
           }
@@ -2078,7 +2115,7 @@ h1 { margin: 0 0 4px; font-size: 18px; }
 .tab.active { background: #1e3a5f; border-color: #60a5fa; color: #fff; }
 main { padding: 10px 18px 30px; }
 .count { color: #9ca3af; font-size: 12px; margin: 4px 0 8px; }
-.row { display: grid; grid-template-columns: 66px 110px 150px 64px minmax(0,1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid #262b35; align-items: start; }
+.row { display: grid; grid-template-columns: 100px 110px 150px 64px minmax(0,1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid #262b35; align-items: start; }
 .row:hover { background: #1b1f27; }
 .time { color: #9ca3af; font-variant-numeric: tabular-nums; }
 .room { color: #93c5fd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2087,7 +2124,7 @@ main { padding: 10px 18px 30px; }
 .kind { color: #c4b5fd; font-size: 12px; }
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 760px) {
-  .row { grid-template-columns: 56px minmax(0,1fr); }
+  .row { grid-template-columns: 96px minmax(0,1fr); }
   .room, .name, .kind { grid-column: 2; }
   .text { grid-column: 2; }
 }
@@ -2175,7 +2212,9 @@ for (const account of ACCOUNTS) addTab(String(account.playerId), account.name);
 
 function formatTime(ts) {
   const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const pad = (value) => String(value).padStart(2, "0");
+  return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+    pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
 }
 
 function kindVisibleFor(record) {
@@ -2403,6 +2442,319 @@ render();
     return { mount, open: openDialog, close: closeDialog };
   }
 
+  // src/core/room-nav.js
+  function getRoomState() {
+    const inRoom = typeof window.ServerPlayerIsInChatRoom === "function" ? window.ServerPlayerIsInChatRoom() : false;
+    const characters = window.ChatRoomData?.Character;
+    const roomCharacter = window.ChatRoomCharacter;
+    return {
+      inRoom,
+      name: window.ChatRoomData?.Name ?? "",
+      space: window.ChatRoomData?.Space ?? "",
+      memberCount: Array.isArray(characters) ? characters.length : Array.isArray(roomCharacter) ? roomCharacter.length : 0,
+      screen: window.CurrentScreen,
+      loggedIn: typeof window.ServerIsLoggedIn === "function" ? window.ServerIsLoggedIn() : false
+    };
+  }
+  async function leaveRoom() {
+    const previousRoom = window.ChatRoomData?.Name ?? "";
+    if (!window.ServerPlayerIsInChatRoom()) {
+      return { ok: true, previousRoom, currentRoom: "" };
+    }
+    try {
+      window.ChatRoomLeave();
+      await window.CommonSetScreen("Online", "ChatSearch");
+      await waitFor(
+        () => !window.ServerPlayerIsInChatRoom() && window.CurrentScreen === "ChatSearch",
+        5e3
+      ).catch(() => false);
+      return { ok: true, previousRoom, currentRoom: "" };
+    } catch (err) {
+      return { ok: false, error: err?.name || "LeaveFailed", previousRoom, currentRoom: previousRoom };
+    }
+  }
+  async function joinRoomByName(roomName) {
+    const previousRoom = window.ChatRoomData?.Name ?? "";
+    if (typeof roomName !== "string" || roomName.trim() === "") {
+      return { ok: false, error: "EmptyRoomName", previousRoom, currentRoom: previousRoom };
+    }
+    const target = roomName.trim();
+    if (window.ServerPlayerIsInChatRoom() && previousRoom === target) {
+      return { ok: true, roomName: target, previousRoom, currentRoom: target };
+    }
+    if (typeof window.ServerRoomJoin !== "function") {
+      return { ok: false, error: "ServerRoomJoinUnavailable", previousRoom, currentRoom: previousRoom };
+    }
+    try {
+      if (window.ServerPlayerIsInChatRoom()) window.ChatRoomLeave();
+      await window.CommonSetScreen("Online", "ChatSearch");
+      const result = await window.ServerRoomJoin(target);
+      if (!result?.ok) {
+        return {
+          ok: false,
+          error: result?.error?.name || "JoinFailed",
+          previousRoom,
+          currentRoom: window.ChatRoomData?.Name ?? ""
+        };
+      }
+      const synced = await waitFor(
+        () => window.CurrentScreen === "ChatRoom" && window.ChatRoomData?.Name === target,
+        1e4
+      ).catch(() => false);
+      if (!synced && window.ChatRoomData?.Name !== target) {
+        return {
+          ok: false,
+          error: "RoomSyncTimeout",
+          previousRoom,
+          currentRoom: window.ChatRoomData?.Name ?? ""
+        };
+      }
+      return {
+        ok: true,
+        roomName: target,
+        previousRoom,
+        currentRoom: window.ChatRoomData?.Name ?? target
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err?.name || "JoinFailed",
+        previousRoom,
+        currentRoom: window.ChatRoomData?.Name ?? ""
+      };
+    }
+  }
+
+  // src/core/room-rules.js
+  function canFollowRooms(active, target, busy = false) {
+    if (busy || !active || !target) return false;
+    if (active.key === target.key) return false;
+    if (!active.loggedIn || !active.online || !target.loggedIn || !target.online) return false;
+    if (!target.inRoom || !target.room) return false;
+    if (!active.inRoom || !active.room) return true;
+    return active.room !== target.room;
+  }
+  function canSwapRooms(active, target, busy = false) {
+    if (!canFollowRooms(active, target, busy)) return false;
+    if (!active.inRoom || !active.room) return true;
+    return Number(active.roomMemberCount) > 1;
+  }
+
+  // src/parent/room-coordinator.js
+  function withTimeout(promise, ms, label) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn(`[BC Multi] room ${label} timeout`);
+        resolve(null);
+      }, ms);
+      Promise.resolve(promise).then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      }, (err) => {
+        clearTimeout(timer);
+        console.warn(`[BC Multi] room ${label} failed`, err);
+        resolve(null);
+      });
+    });
+  }
+  function createRoomCoordinator({ state, accounts, feed, onChange }) {
+    let seq = 0;
+    const pending = /* @__PURE__ */ new Map();
+    function activeAccount() {
+      return state.accounts.find((a) => a.key === state.activeKey);
+    }
+    function notify(text, level = "warning") {
+      try {
+        const toast = window.ToastManager;
+        if (toast && typeof toast[level] === "function") {
+          toast[level](text, { category: "BCMultiAccount" });
+          return;
+        }
+      } catch {
+      }
+      if (level === "error" || level === "warning") window.alert(text);
+      else console.info(`[BC Multi] ${text}`);
+    }
+    function requestState(acc) {
+      if (!acc) return Promise.resolve(null);
+      if (acc.top) return Promise.resolve(getRoomState());
+      const reqId = `room-state-${++seq}`;
+      return withTimeout(new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pending.delete(reqId);
+          resolve(null);
+        }, 4e3);
+        pending.set(reqId, { accKey: acc.key, resolve, timer });
+        accounts.postTo(acc, { type: MSG.ROOM_STATE_REQUEST, reqId });
+      }), 4500, "state");
+    }
+    function requestJoin(acc, roomName) {
+      if (!acc || !roomName) return Promise.resolve(null);
+      if (acc.top) return withTimeout(joinRoomByName(roomName), 3e4, "join");
+      const reqId = `room-join-${++seq}`;
+      return withTimeout(new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pending.delete(reqId);
+          resolve(null);
+        }, 3e4);
+        pending.set(reqId, { accKey: acc.key, resolve, timer });
+        accounts.postTo(acc, { type: MSG.ROOM_JOIN, reqId, roomName });
+      }), 31e3, "join");
+    }
+    function requestLeave(acc) {
+      if (!acc) return Promise.resolve(null);
+      if (acc.top) return withTimeout(leaveRoom(), 15e3, "leave");
+      const reqId = `room-leave-${++seq}`;
+      return withTimeout(new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pending.delete(reqId);
+          resolve(null);
+        }, 15e3);
+        pending.set(reqId, { accKey: acc.key, resolve, timer });
+        accounts.postTo(acc, { type: MSG.ROOM_LEAVE, reqId });
+      }), 16e3, "leave");
+    }
+    function handleMessage(acc, data) {
+      if (!data || data.type !== MSG.ROOM_STATE && data.type !== MSG.ROOM_JOIN_RESULT && data.type !== MSG.ROOM_LEAVE_RESULT) {
+        return false;
+      }
+      const entry = pending.get(data.reqId);
+      if (!entry || entry.accKey !== acc.key) return true;
+      pending.delete(data.reqId);
+      clearTimeout(entry.timer);
+      entry.resolve(data);
+      return true;
+    }
+    function canFollow(target) {
+      return canFollowRooms(activeAccount(), target, state.roomBusy);
+    }
+    function canSwap(target) {
+      return canSwapRooms(activeAccount(), target, state.roomBusy);
+    }
+    function applyState(acc, roomState) {
+      if (!acc || !roomState) return;
+      acc.inRoom = !!roomState.inRoom;
+      acc.room = roomState.name || "";
+      acc.roomSpace = roomState.space || "";
+      acc.roomMemberCount = Number(roomState.memberCount) || 0;
+    }
+    async function applyRoom(acc, fallbackRoom) {
+      const fresh = await requestState(acc);
+      if (fresh) {
+        applyState(acc, fresh);
+      } else {
+        acc.inRoom = !!fallbackRoom;
+        acc.room = fallbackRoom || "";
+        if (!fallbackRoom) {
+          acc.roomSpace = "";
+          acc.roomMemberCount = 0;
+        }
+      }
+      onChange?.();
+    }
+    async function rollback(acc, roomName) {
+      if (!acc || !roomName) return false;
+      const result = await requestJoin(acc, roomName);
+      if (!result || !result.ok) return false;
+      await applyRoom(acc, result.currentRoom || roomName);
+      return true;
+    }
+    async function follow(target) {
+      const active = activeAccount();
+      if (!canFollow(target)) return;
+      state.roomBusy = true;
+      onChange?.();
+      try {
+        const [a, b] = await Promise.all([requestState(active), requestState(target)]);
+        if (!a || !b?.inRoom || !b.name || a.inRoom && (!a.name || a.name === b.name)) {
+          notify("\u623F\u95F4\u72B6\u6001\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u8BD5\u3002", "warning");
+          return;
+        }
+        const result = await requestJoin(active, b.name);
+        if (!result || !result.ok) {
+          if (a.inRoom) await rollback(active, a.name);
+          notify(`\u8FDB\u5165\u623F\u95F4\u5931\u8D25\uFF1A${result?.error || "\u672A\u77E5\u9519\u8BEF"}`, "error");
+          return;
+        }
+        await applyRoom(active, result.currentRoom || b.name);
+        notify(`\u5DF2\u8FDB\u5165 ${b.name}\u3002`, "info");
+      } finally {
+        state.roomBusy = false;
+        onChange?.();
+      }
+    }
+    async function swap(target) {
+      const active = activeAccount();
+      if (!canSwap(target)) return;
+      state.roomBusy = true;
+      onChange?.();
+      try {
+        const [a, b] = await Promise.all([requestState(active), requestState(target)]);
+        if (!a || !b?.inRoom || !b.name || a.inRoom && (!a.name || a.name === b.name)) {
+          notify("\u623F\u95F4\u72B6\u6001\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u8BD5\u3002", "warning");
+          return;
+        }
+        if (!a.inRoom) {
+          const entered = await requestJoin(active, b.name);
+          if (!entered || !entered.ok) {
+            notify(`\u524D\u53F0\u8D26\u53F7\u8FDB\u5165 ${b.name} \u5931\u8D25\uFF1A${entered?.error || "\u672A\u77E5\u9519\u8BEF"}`, "error");
+            return;
+          }
+          await applyRoom(active, entered.currentRoom || b.name);
+          const left = await requestLeave(target);
+          if (!left || !left.ok) {
+            await requestLeave(active);
+            await applyRoom(active, "");
+            notify(`\u540E\u53F0\u8D26\u53F7\u79BB\u5F00\u623F\u95F4\u5931\u8D25\uFF1A${left?.error || "\u672A\u77E5\u9519\u8BEF"}`, "error");
+            return;
+          }
+          await applyRoom(target, "");
+          notify(`\u5DF2\u4EA4\u6362\uFF1A${b.name} \u7531\u524D\u53F0\u63A5\u7BA1\uFF0C${target.name} \u5DF2\u79BB\u5F00\u623F\u95F4\u3002`, "info");
+          return;
+        }
+        if ((Number(a.memberCount) || 0) <= 1) {
+          notify("\u524D\u53F0\u623F\u95F4\u53EA\u6709\u4F60\u4E00\u4E2A\u4EBA\uFF0C\u4EA4\u6362\u53EF\u80FD\u5BFC\u81F4\u623F\u95F4\u6D88\u5931\uFF0C\u5DF2\u53D6\u6D88\u3002", "warning");
+          return;
+        }
+        const first = await requestJoin(active, b.name);
+        if (!first || !first.ok) {
+          await rollback(active, a.name);
+          notify(`\u524D\u53F0\u8D26\u53F7\u8FDB\u5165 ${b.name} \u5931\u8D25\uFF1A${first?.error || "\u672A\u77E5\u9519\u8BEF"}`, "error");
+          return;
+        }
+        await applyRoom(active, first.currentRoom || b.name);
+        const second = await requestJoin(target, a.name);
+        if (second && second.ok) {
+          await applyRoom(target, second.currentRoom || a.name);
+          notify(`\u5DF2\u4EA4\u6362\uFF1A${a.name} \u21C4 ${b.name}\u3002`, "info");
+          return;
+        }
+        const backgroundBack = await rollback(target, b.name);
+        const foregroundBack = await rollback(active, a.name);
+        if (backgroundBack && foregroundBack) {
+          notify(`\u4EA4\u6362\u5931\u8D25\uFF0C\u5DF2\u6062\u590D\u539F\u623F\u95F4\uFF1A${second?.error || "\u672A\u77E5\u9519\u8BEF"}`, "error");
+        } else {
+          notify(
+            `\u4EA4\u6362\u90E8\u5206\u5931\u8D25\uFF1A\u540E\u53F0\u8D26\u53F7${backgroundBack ? "\u5DF2\u56DE\u5230" : "\u672A\u80FD\u56DE\u5230"} ${b.name}\uFF1B\u524D\u53F0\u8D26\u53F7${foregroundBack ? "\u5DF2\u56DE\u5230" : "\u672A\u80FD\u56DE\u5230"} ${a.name}\u3002\u8BF7\u624B\u52A8\u68C0\u67E5\u3002`,
+            "error"
+          );
+        }
+      } finally {
+        state.roomBusy = false;
+        onChange?.();
+      }
+    }
+    return {
+      handleMessage,
+      canFollow,
+      canSwap,
+      follow,
+      swap,
+      requestState,
+      requestJoin
+    };
+  }
+
   // src/parent/index.js
   function initParent() {
     const state = createParentState();
@@ -2415,6 +2767,7 @@ render();
     state.logDialog = logDialog;
     let accounts;
     let settingsDialog;
+    let roomCoordinator;
     function configureAccount(acc) {
       const sound = acc.key === state.activeKey ? settings.sounds.active : settings.sounds.background;
       if (acc.top) {
@@ -2452,7 +2805,11 @@ render();
         onSwitch: (key) => accounts.switchTo(key),
         onAdd: () => accounts.add(),
         onRemove: (key) => accounts.remove(key),
-        onSettings: () => settingsDialog.open()
+        onSettings: () => settingsDialog.open(),
+        canFollow: (acc) => roomCoordinator?.canFollow(acc) ?? false,
+        canSwap: (acc) => roomCoordinator?.canSwap(acc) ?? false,
+        onFollow: (acc) => roomCoordinator?.follow(acc),
+        onSwap: (acc) => roomCoordinator?.swap(acc)
       }
     });
     accounts = createAccounts({
@@ -2460,6 +2817,12 @@ render();
       render: () => toolbar.render(),
       configureAccount,
       afterSwitch: () => feed.render()
+    });
+    roomCoordinator = createRoomCoordinator({
+      state,
+      accounts,
+      feed,
+      onChange: () => scheduleRender()
     });
     function scheduleRender() {
       if (state.renderTimer) return;
@@ -2514,7 +2877,8 @@ render();
       feed,
       scheduleRender,
       configureAccount,
-      logger
+      logger,
+      roomCoordinator
     });
     function updateTopInfo(force = false) {
       const top = state.accounts.find((a) => a.top);
@@ -2526,20 +2890,15 @@ render();
         info.name,
         info.account,
         info.memberNumber,
-        info.room
+        info.inRoom,
+        info.room,
+        info.roomSpace,
+        info.roomMemberCount
       ].join("");
       if (!force && key === state.topInfoKey) return;
       state.topInfoKey = key;
-      const previousRoom = top.room;
       accounts.applyInfo(top, info);
-      if (state.topActive) {
-        if (previousRoom !== top.room) {
-          feed.clearRoom(previousRoom);
-          feed.clearRoom(top.room);
-        } else {
-          feed.render();
-        }
-      }
+      if (state.topActive) feed.render();
       scheduleRender();
     }
     function installKeyboard() {
@@ -2641,7 +3000,10 @@ render();
         info.name,
         info.account,
         info.memberNumber,
-        info.room
+        info.inRoom,
+        info.room,
+        info.roomSpace,
+        info.roomMemberCount
       ].join("");
       if (!force && key === state.lastInfoKey) return;
       state.lastInfoKey = key;
@@ -2688,6 +3050,40 @@ render();
       }
     };
     bridge.listen((data) => {
+      if (data.type === MSG.ROOM_STATE_REQUEST) {
+        post(MSG.ROOM_STATE, { reqId: data.reqId, ...getRoomState() });
+        return;
+      }
+      if (data.type === MSG.ROOM_JOIN) {
+        const reqId = data.reqId;
+        joinRoomByName(data.roomName).then((result) => {
+          post(MSG.ROOM_JOIN_RESULT, { reqId, ...result });
+          publishInfo(true);
+        }).catch((err) => {
+          post(MSG.ROOM_JOIN_RESULT, {
+            reqId,
+            ok: false,
+            error: err?.name || "JoinFailed"
+          });
+          publishInfo(true);
+        });
+        return;
+      }
+      if (data.type === MSG.ROOM_LEAVE) {
+        const reqId = data.reqId;
+        leaveRoom().then((result) => {
+          post(MSG.ROOM_LEAVE_RESULT, { reqId, ...result });
+          publishInfo(true);
+        }).catch((err) => {
+          post(MSG.ROOM_LEAVE_RESULT, {
+            reqId,
+            ok: false,
+            error: err?.name || "LeaveFailed"
+          });
+          publishInfo(true);
+        });
+        return;
+      }
       if (data.type === MSG.SET_ACTIVE) {
         state.active = !!data.active;
         if (state.active) {

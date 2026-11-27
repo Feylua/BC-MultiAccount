@@ -163,6 +163,42 @@ export function createToolbar({ state, feed, handlers }) {
 			wrap.appendChild(room);
 		}
 
+		const canFollow = acc.key !== state.activeKey && handlers.canFollow?.(acc);
+		const canSwap = acc.key !== state.activeKey && handlers.canSwap?.(acc);
+		if (canFollow) {
+			const actions = document.createElement("div");
+			actions.className = "bcma-room-actions";
+			actions.addEventListener("click", (event) => event.stopPropagation());
+
+			const follow = document.createElement("button");
+			follow.type = "button";
+			follow.className = "bcma-room-action";
+			follow.textContent = "↪";
+			follow.title = `当前账号进入 ${acc.room}`;
+			follow.addEventListener("click", (event) => {
+				event.stopPropagation();
+				handlers.onFollow?.(acc);
+			});
+			actions.appendChild(follow);
+
+			if (canSwap) {
+				const swap = document.createElement("button");
+				swap.type = "button";
+				swap.className = "bcma-room-action";
+				swap.textContent = "⇄";
+				const active = state.accounts.find((a) => a.key === state.activeKey);
+				swap.title = active && !active.inRoom
+					? `前台进入该房间，并让 ${label} 离开（当前账号在大厅）`
+					: `交换两个账号的房间：${acc.room}`;
+				swap.addEventListener("click", (event) => {
+					event.stopPropagation();
+					handlers.onSwap?.(acc);
+				});
+				actions.appendChild(swap);
+			}
+			wrap.appendChild(actions);
+		}
+
 		return wrap;
 	}
 

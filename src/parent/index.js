@@ -14,6 +14,7 @@ import { loadSettings, saveSettings } from "./settings.js";
 import { createSettingsDialog } from "./settings-dialog.js";
 import { createLogger } from "./logger.js";
 import { createLogDialog } from "./log-dialog.js";
+import { createRoomCoordinator } from "./room-coordinator.js";
 
 export function initParent() {
 	const state = createParentState();
@@ -26,6 +27,7 @@ export function initParent() {
 	state.logDialog = logDialog;
 	let accounts;
 	let settingsDialog;
+	let roomCoordinator;
 
 	function configureAccount(acc) {
 		const sound = acc.key === state.activeKey ? settings.sounds.active : settings.sounds.background;
@@ -69,6 +71,10 @@ export function initParent() {
 			onAdd: () => accounts.add(),
 			onRemove: (key) => accounts.remove(key),
 			onSettings: () => settingsDialog.open(),
+			canFollow: (acc) => roomCoordinator?.canFollow(acc) ?? false,
+			canSwap: (acc) => roomCoordinator?.canSwap(acc) ?? false,
+			onFollow: (acc) => roomCoordinator?.follow(acc),
+			onSwap: (acc) => roomCoordinator?.swap(acc),
 		},
 	});
 
@@ -77,6 +83,13 @@ export function initParent() {
 		render: () => toolbar.render(),
 		configureAccount,
 		afterSwitch: () => feed.render(),
+	});
+
+	roomCoordinator = createRoomCoordinator({
+		state,
+		accounts,
+		feed,
+		onChange: () => scheduleRender(),
 	});
 
 	function scheduleRender() {
@@ -135,6 +148,7 @@ export function initParent() {
 		scheduleRender,
 		configureAccount,
 		logger,
+		roomCoordinator,
 	});
 
 	function updateTopInfo(force = false) {
@@ -147,20 +161,15 @@ export function initParent() {
 			info.name,
 			info.account,
 			info.memberNumber,
+			info.inRoom,
 			info.room,
+			info.roomSpace,
+			info.roomMemberCount,
 		].join("\u0001");
 		if (!force && key === state.topInfoKey) return;
 		state.topInfoKey = key;
-		const previousRoom = top.room;
 		accounts.applyInfo(top, info);
-		if (state.topActive) {
-			if (previousRoom !== top.room) {
-				feed.clearRoom(previousRoom);
-				feed.clearRoom(top.room);
-			} else {
-				feed.render();
-			}
-		}
+		if (state.topActive) feed.render();
 		scheduleRender();
 	}
 

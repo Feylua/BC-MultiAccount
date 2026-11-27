@@ -16,9 +16,17 @@ export function getAccountInfo() {
 	const account = loggedIn && p && typeof p.AccountName === "string" ? p.AccountName : "";
 	const memberNumber = loggedIn && p && typeof p.MemberNumber === "number" ? p.MemberNumber : null;
 	let room = "";
-	const inRoom = typeof window.ServerPlayerIsInChatRoom !== "function" || window.ServerPlayerIsInChatRoom();
+	let roomSpace = "";
+	let roomMemberCount = 0;
+	const inRoom = typeof window.ServerPlayerIsInChatRoom === "function"
+		? window.ServerPlayerIsInChatRoom()
+		: false;
 	if (loggedIn && inRoom && window.ChatRoomData && typeof window.ChatRoomData.Name === "string") {
 		room = window.ChatRoomData.Name.trim();
+		roomSpace = typeof window.ChatRoomData.Space === "string" ? window.ChatRoomData.Space : "";
+		roomMemberCount = Array.isArray(window.ChatRoomData.Character)
+			? window.ChatRoomData.Character.length
+			: (Array.isArray(window.ChatRoomCharacter) ? window.ChatRoomCharacter.length : 0);
 	}
-	return { loggedIn, online, name, account, memberNumber, room };
+	return { loggedIn, online, name, account, memberNumber, inRoom, room, roomSpace, roomMemberCount };
 }

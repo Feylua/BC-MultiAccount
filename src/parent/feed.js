@@ -1,5 +1,4 @@
 import { FEED_MAX_LINES } from "../constants.js";
-import { isSameRoomChatOrAction } from "../core/room.js";
 
 export function createFeed(state) {
 	let feedElement = null;
@@ -21,12 +20,13 @@ export function createFeed(state) {
 	}
 
 	function visibleEntries() {
-		const active = state.accounts.find((a) => a.key === state.activeKey);
 		return state.feedMessages.filter((entry) => {
 			if (!entry || typeof entry === "string") return true;
-			// Once an account becomes active its old background history is redundant.
+			// Switching rooms must not hide old messages: the foreground account did
+			// not actually read them. Only the account that is currently active hides
+			// its own old background history.
 			if (entry.accountKey === state.activeKey) return false;
-			return !isSameRoomChatOrAction(entry.kind, entry.room, active?.room);
+			return true;
 		});
 	}
 

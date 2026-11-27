@@ -111,7 +111,7 @@ h1 { margin: 0 0 4px; font-size: 18px; }
 .tab.active { background: #1e3a5f; border-color: #60a5fa; color: #fff; }
 main { padding: 10px 18px 30px; }
 .count { color: #9ca3af; font-size: 12px; margin: 4px 0 8px; }
-.row { display: grid; grid-template-columns: 66px 110px 150px 64px minmax(0,1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid #262b35; align-items: start; }
+.row { display: grid; grid-template-columns: 100px 110px 150px 64px minmax(0,1fr); gap: 8px; padding: 7px 8px; border-bottom: 1px solid #262b35; align-items: start; }
 .row:hover { background: #1b1f27; }
 .time { color: #9ca3af; font-variant-numeric: tabular-nums; }
 .room { color: #93c5fd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -120,7 +120,7 @@ main { padding: 10px 18px 30px; }
 .kind { color: #c4b5fd; font-size: 12px; }
 .text { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 760px) {
-  .row { grid-template-columns: 56px minmax(0,1fr); }
+  .row { grid-template-columns: 96px minmax(0,1fr); }
   .room, .name, .kind { grid-column: 2; }
   .text { grid-column: 2; }
 }
@@ -203,7 +203,9 @@ for (const account of ACCOUNTS) addTab(String(account.playerId), account.name);
 
 function formatTime(ts) {
   const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const pad = (value) => String(value).padStart(2, "0");
+  return pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+    pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
 }
 
 function kindVisibleFor(record) {

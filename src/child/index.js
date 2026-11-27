@@ -13,6 +13,7 @@ import { installAudioPolicy } from "../core/audio.js";
 import { installReconnect } from "../core/reconnect.js";
 import { createLogBatcher } from "../core/log-batcher.js";
 import { makeBeepRecord, makeOutgoingBeepRecord, makeRecord } from "../core/log-record.js";
+import { getRoomState, joinRoomByName, leaveRoom } from "../core/room-nav.js";
 import { createChildBridge } from "./bridge.js";
 
 export function initChild(id) {
@@ -42,7 +43,10 @@ export function initChild(id) {
 			info.name,
 			info.account,
 			info.memberNumber,
+			info.inRoom,
 			info.room,
+			info.roomSpace,
+			info.roomMemberCount,
 		].join("\u0001");
 		if (!force && key === state.lastInfoKey) return;
 		state.lastInfoKey = key;
@@ -94,6 +98,44 @@ export function initChild(id) {
 	};
 
 	bridge.listen((data) => {
+		if (data.type === MSG.ROOM_STATE_REQUEST) {
+			post(MSG.ROOM_STATE, { reqId: data.reqId, ...getRoomState() });
+			return;
+		}
+		if (data.type === MSG.ROOM_JOIN) {
+			const reqId = data.reqId;
+			joinRoomByName(data.roomName)
+				.then((result) => {
+					post(MSG.ROOM_JOIN_RESULT, { reqId, ...result });
+					publishInfo(true);
+				})
+				.catch((err) => {
+					post(MSG.ROOM_JOIN_RESULT, {
+						reqId,
+						ok: false,
+						error: err?.name || "JoinFailed",
+					});
+					publishInfo(true);
+				});
+			return;
+		}
+		if (data.type === MSG.ROOM_LEAVE) {
+			const reqId = data.reqId;
+			leaveRoom()
+				.then((result) => {
+					post(MSG.ROOM_LEAVE_RESULT, { reqId, ...result });
+					publishInfo(true);
+				})
+				.catch((err) => {
+					post(MSG.ROOM_LEAVE_RESULT, {
+						reqId,
+						ok: false,
+						error: err?.name || "LeaveFailed",
+					});
+					publishInfo(true);
+				});
+			return;
+		}
 		if (data.type === MSG.SET_ACTIVE) {
 			state.active = !!data.active;
 			if (state.active) {

@@ -43,7 +43,10 @@ export function createAccounts({ state, render, configureAccount, afterSwitch })
 		if (typeof info.account === "string") acc.account = info.account;
 		if (typeof info.memberNumber === "number") acc.member = info.memberNumber;
 		else if (info.memberNumber === null) acc.member = null;
+		if (typeof info.inRoom === "boolean") acc.inRoom = info.inRoom;
 		if (typeof info.room === "string") acc.room = info.room;
+		if (typeof info.roomSpace === "string") acc.roomSpace = info.roomSpace;
+		if (typeof info.roomMemberCount === "number") acc.roomMemberCount = info.roomMemberCount;
 	}
 
 	function clearUnread(acc) {
@@ -132,7 +135,10 @@ export function createAccounts({ state, render, configureAccount, afterSwitch })
 			member: null,
 			loggedIn: false,
 			online: false,
+			inRoom: false,
 			room: "",
+			roomSpace: "",
+			roomMemberCount: 0,
 			ready: false,
 			unread: emptyUnread(),
 		};
@@ -184,7 +190,10 @@ export function createAccounts({ state, render, configureAccount, afterSwitch })
 			member: null,
 			loggedIn: false,
 			online: false,
+			inRoom: false,
 			room: "",
+			roomSpace: "",
+			roomMemberCount: 0,
 			ready: true,
 			unread: emptyUnread(),
 		});

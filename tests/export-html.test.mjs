@@ -24,6 +24,13 @@ test("export HTML has a player proportion bar and timestamp", () => {
 	assert.match(html, /生成于 \d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2} · 2 条/);
 });
 
+test("message rows include MM-DD before local time", () => {
+	const html = generateExportHtml(records, { title: "T", source: "当前会话消息" });
+	assert.ok(html.includes('grid-template-columns: 100px 110px 150px 64px'));
+	assert.ok(html.includes('pad(d.getMonth() + 1) + "-" + pad(d.getDate())'));
+	assert.ok(html.includes('pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds())'));
+});
+
 test("player bar segment widths follow message counts", () => {
 	const many = Array.from({ length: 9 }, (_, index) => ({
 		uid: String(index),

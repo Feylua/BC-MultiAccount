@@ -17,4 +17,10 @@ export const MSG = Object.freeze({
 	RECONNECT_NOW: "reconnect-now",
 	LOG_BATCH: "log-batch",
 	LOG_FLUSH: "log-flush",
+	ROOM_STATE_REQUEST: "room-state-request",
+	ROOM_STATE: "room-state",
+	ROOM_JOIN: "room-join",
+	ROOM_JOIN_RESULT: "room-join-result",
+	ROOM_LEAVE: "room-leave",
+	ROOM_LEAVE_RESULT: "room-leave-result",
 });

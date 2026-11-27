@@ -20,6 +20,7 @@ export function createParentState() {
 		feedSeen: new Set(),
 		feedRecent: new Map(),
 		feedOpen: false,
+		roomBusy: false,
 		credentials: new Map(),
 		pausedUntil: 0,
 		topAudio: null,

@@ -4,45 +4,32 @@ import { isUnreadKind } from "../core/messages.js";
 import { normalizeAccountName, RC } from "../core/reconnect.js";
 import { isSameRoomChatOrAction } from "../core/room.js";
 
-export function createParentBridge({ state, accounts, feed, scheduleRender, configureAccount, logger }) {
+export function createParentBridge({ state, accounts, feed, scheduleRender, configureAccount, logger, roomCoordinator }) {
 	function listen() {
 		window.addEventListener("message", (event) => {
 			const data = event.data;
 			if (!data || data.channel !== CHANNEL) return;
 			const acc = state.accounts.find((a) => a.frame && a.frame.contentWindow === event.source);
 			if (!acc) return;
+			if (roomCoordinator?.handleMessage(acc, data)) return;
 
 			switch (data.type) {
 				case MSG.READY: {
 					acc.ready = true;
-					const previousRoom = acc.room;
 					accounts.applyInfo(acc, data);
 					accounts.clearUnread(acc);
 					configureAccount?.(acc);
 					accounts.postTo(acc, { type: MSG.SET_ACTIVE, active: acc.key === state.activeKey });
 					if (acc.key === state.activeKey) {
 						accounts.requestScrollBottom(acc);
-						if (previousRoom !== acc.room) {
-							feed.clearRoom(previousRoom);
-							feed.clearRoom(acc.room);
-						} else {
-							feed.render();
-						}
+						feed.render();
 					}
 					scheduleRender();
 					break;
 				}
 				case MSG.ACCOUNT: {
-					const previousRoom = acc.room;
 					accounts.applyInfo(acc, data);
-					if (acc.key === state.activeKey) {
-						if (previousRoom !== acc.room) {
-							feed.clearRoom(previousRoom);
-							feed.clearRoom(acc.room);
-						} else {
-							feed.render();
-						}
-					}
+					if (acc.key === state.activeKey) feed.render();
 					scheduleRender();
 					break;
 				}
