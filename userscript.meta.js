@@ -2,7 +2,7 @@
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
 // @version      __VERSION__
-// @description  One BC window, multiple accounts, unread feed, room follow/swap, collapsible account bar, auto-reconnect, and message-log export with WCE original text.
+// @description  One BC window, multiple accounts, unread feed, room follow/swap, collapsible account bar, auto-reconnect, and 30-day message-log export with filters and WCE original text.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
 // @match        https://*.bondage-europe.com/R*/*

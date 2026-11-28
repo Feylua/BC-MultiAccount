@@ -1,6 +1,6 @@
 import { addRecords, clearRecords, getAllRecords, purgeRecords, queryRecords } from "./log-store.js";
 
-const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const SESSION_MAX = 20000;
 
 export function createLogger({ state, settings }) {

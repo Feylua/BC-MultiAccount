@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BC Multi-Account Switcher
 // @namespace    bc-multi-account
-// @version      1.2.2
-// @description  One BC window, multiple accounts, unread feed, room follow/swap, collapsible account bar, auto-reconnect, and message-log export with WCE original text.
+// @version      1.2.3
+// @description  One BC window, multiple accounts, unread feed, room follow/swap, collapsible account bar, auto-reconnect, and 30-day message-log export with filters and WCE original text.
 // @author       Feylua
 // @match        https://*.bondageprojects.elementfx.com/R*/*
 // @match        https://*.bondage-europe.com/R*/*
@@ -20,7 +20,7 @@
   var MAX_ACCOUNTS = 8;
   var FEED_MAX_LINES = 14;
   var SETTINGS_KEY = "bcma.settings";
-  var VERSION = "1.2.2";
+  var VERSION = "1.2.3";
 
   // src/core/input.js
   function readChildId() {
@@ -2023,7 +2023,7 @@ ${status}` + (acc.room ? `
   }
 
   // src/parent/logger.js
-  var RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
+  var RETENTION_MS = 30 * 24 * 60 * 60 * 1e3;
   var SESSION_MAX = 2e4;
   function createLogger({ state, settings }) {
     let lastPurgeDay = "";
@@ -2179,6 +2179,19 @@ h1 { margin: 0 0 4px; font-size: 18px; }
 .player-legend-item b { color: #d1d5db; font-weight: 600; }
 .search-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 #search { flex: 1 1 220px; min-width: 160px; padding: 7px 9px; border: 1px solid #374151; border-radius: 7px; background: #1f232b; color: #e5e7eb; outline: none; }
+.select-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.select-label { display: flex; align-items: center; gap: 5px; color: #9ca3af; font-size: 12px; }
+.select-label select {
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid #374151;
+  border-radius: 7px;
+  background: #1f232b;
+  color: #e5e7eb;
+  font: inherit;
+  outline: none;
+}
+.select-label select:focus { border-color: #60a5fa; }
 #kindFilters { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
 .kind-filter { border: 1px solid #374151; border-radius: 7px; background: #1f232b; color: #cbd5e1; padding: 5px 9px; cursor: pointer; font: inherit; }
 .kind-filter.active { background: #1e3a5f; border-color: #60a5fa; color: #fff; }
@@ -2226,6 +2239,14 @@ main { padding: 10px 18px 30px; }
   <div class="search-row">
     <input id="search" type="search" placeholder="\u641C\u7D22\u6D88\u606F\u3001\u89D2\u8272\u6216\u623F\u95F4\u2026">
   </div>
+  <div class="select-row">
+    <label class="select-label">\u65E5\u671F
+      <select id="dateFilter" aria-label="\u6309\u65E5\u671F\u7B5B\u9009"></select>
+    </label>
+    <label class="select-label">\u623F\u95F4
+      <select id="roomFilter" aria-label="\u6309\u623F\u95F4\u7B5B\u9009"></select>
+    </label>
+  </div>
   <div id="kindFilters" aria-label="\u6D88\u606F\u7C7B\u578B\u7B5B\u9009"></div>
   <div id="tabs" aria-label="\u6536\u4FE1 Player \u7B5B\u9009"></div>
 </header>
@@ -2256,10 +2277,27 @@ const KIND_FILTERS = [
 const kindVisible = { chat: true, action: true, whisper: true, beep: true, system: true };
 let current = "all";
 let query = "";
+let selectedDate = "all";
+let selectedRoom = "all";
 const kindFilters = document.getElementById("kindFilters");
 const tabs = document.getElementById("tabs");
 const rows = document.getElementById("rows");
 const count = document.getElementById("count");
+const dateFilter = document.getElementById("dateFilter");
+const roomFilter = document.getElementById("roomFilter");
+
+function dateKey(ts) {
+  const d = new Date(ts);
+  const pad = (value) => String(value).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+function addOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.appendChild(option);
+}
 
 function addKindFilter(filter) {
   const button = document.createElement("button");
@@ -2294,6 +2332,22 @@ function addTab(value, label) {
 addTab("all", "\u5168\u90E8");
 for (const account of ACCOUNTS) addTab(String(account.playerId), account.name);
 
+addOption(dateFilter, "all", "[\u5168\u90E8]");
+const dates = [...new Set(DATA.map(record => dateKey(record.ts)))].sort().reverse();
+for (const date of dates) addOption(dateFilter, date, date);
+dateFilter.addEventListener("change", () => {
+  selectedDate = dateFilter.value;
+  render();
+});
+
+addOption(roomFilter, "all", "[\u5168\u90E8]");
+const rooms = [...new Set(DATA.map(record => String(record.room || "")))].sort((a, b) => a.localeCompare(b));
+for (const room of rooms) addOption(roomFilter, room, room || "[\u65E0\u623F\u95F4]");
+roomFilter.addEventListener("change", () => {
+  selectedRoom = roomFilter.value;
+  render();
+});
+
 function formatTime(ts) {
   const d = new Date(ts);
   const pad = (value) => String(value).padStart(2, "0");
@@ -2313,6 +2367,8 @@ function render() {
   const filtered = DATA.filter(record => {
     if (current !== "all" && String(record.playerId) !== current) return false;
     if (!kindVisibleFor(record)) return false;
+    if (selectedDate !== "all" && dateKey(record.ts) !== selectedDate) return false;
+    if (selectedRoom !== "all" && String(record.room || "") !== selectedRoom) return false;
     if (!q) return true;
     return [record.text, SHOW_ORIGINAL ? record.original : "", record.name, record.room, record.account, record.playerName]
       .some(value => String(value || "").toLowerCase().includes(q));
@@ -2383,7 +2439,8 @@ render();
   // src/parent/log-dialog.js
   var RANGES = [
     { value: "24h", label: "\u6700\u8FD1 24 \u5C0F\u65F6", ms: 24 * 60 * 60 * 1e3 },
-    { value: "7d", label: "\u6700\u8FD1 7 \u5929", ms: 7 * 24 * 60 * 60 * 1e3 }
+    { value: "7d", label: "\u6700\u8FD1 7 \u5929", ms: 7 * 24 * 60 * 60 * 1e3 },
+    { value: "30d", label: "\u6700\u8FD1 30 \u5929", ms: 30 * 24 * 60 * 60 * 1e3 }
   ];
   function createLogDialog({ logger }) {
     let overlay;

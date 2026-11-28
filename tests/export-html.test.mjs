@@ -45,6 +45,18 @@ test("export HTML renders and can strip WCE original text", () => {
 	assert.ok(excluded.includes("SHOW_ORIGINAL = false"));
 });
 
+test("export HTML has date and room dropdown filters defaulting to all", () => {
+	const html = generateExportHtml(records, { title: "T", source: "当前会话消息" });
+	assert.ok(html.includes('id="dateFilter"'));
+	assert.ok(html.includes('id="roomFilter"'));
+	assert.ok(html.includes('addOption(dateFilter, "all", "[全部]")'));
+	assert.ok(html.includes('addOption(roomFilter, "all", "[全部]")'));
+	assert.ok(html.includes('let selectedDate = "all"'));
+	assert.ok(html.includes('let selectedRoom = "all"'));
+	assert.ok(html.includes('if (selectedDate !== "all"'));
+	assert.ok(html.includes('if (selectedRoom !== "all"'));
+});
+
 test("player bar segment widths follow message counts", () => {
 	const many = Array.from({ length: 9 }, (_, index) => ({
 		uid: String(index),

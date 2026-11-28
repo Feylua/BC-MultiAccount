@@ -109,6 +109,19 @@ h1 { margin: 0 0 4px; font-size: 18px; }
 .player-legend-item b { color: #d1d5db; font-weight: 600; }
 .search-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
 #search { flex: 1 1 220px; min-width: 160px; padding: 7px 9px; border: 1px solid #374151; border-radius: 7px; background: #1f232b; color: #e5e7eb; outline: none; }
+.select-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.select-label { display: flex; align-items: center; gap: 5px; color: #9ca3af; font-size: 12px; }
+.select-label select {
+  max-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid #374151;
+  border-radius: 7px;
+  background: #1f232b;
+  color: #e5e7eb;
+  font: inherit;
+  outline: none;
+}
+.select-label select:focus { border-color: #60a5fa; }
 #kindFilters { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
 .kind-filter { border: 1px solid #374151; border-radius: 7px; background: #1f232b; color: #cbd5e1; padding: 5px 9px; cursor: pointer; font: inherit; }
 .kind-filter.active { background: #1e3a5f; border-color: #60a5fa; color: #fff; }
@@ -156,6 +169,14 @@ main { padding: 10px 18px 30px; }
   <div class="search-row">
     <input id="search" type="search" placeholder="搜索消息、角色或房间…">
   </div>
+  <div class="select-row">
+    <label class="select-label">日期
+      <select id="dateFilter" aria-label="按日期筛选"></select>
+    </label>
+    <label class="select-label">房间
+      <select id="roomFilter" aria-label="按房间筛选"></select>
+    </label>
+  </div>
   <div id="kindFilters" aria-label="消息类型筛选"></div>
   <div id="tabs" aria-label="收信 Player 筛选"></div>
 </header>
@@ -181,10 +202,27 @@ const KIND_FILTERS = [
 const kindVisible = { chat: true, action: true, whisper: true, beep: true, system: true };
 let current = "all";
 let query = "";
+let selectedDate = "all";
+let selectedRoom = "all";
 const kindFilters = document.getElementById("kindFilters");
 const tabs = document.getElementById("tabs");
 const rows = document.getElementById("rows");
 const count = document.getElementById("count");
+const dateFilter = document.getElementById("dateFilter");
+const roomFilter = document.getElementById("roomFilter");
+
+function dateKey(ts) {
+  const d = new Date(ts);
+  const pad = (value) => String(value).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+}
+
+function addOption(select, value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  select.appendChild(option);
+}
 
 function addKindFilter(filter) {
   const button = document.createElement("button");
@@ -219,6 +257,22 @@ function addTab(value, label) {
 addTab("all", "全部");
 for (const account of ACCOUNTS) addTab(String(account.playerId), account.name);
 
+addOption(dateFilter, "all", "[全部]");
+const dates = [...new Set(DATA.map(record => dateKey(record.ts)))].sort().reverse();
+for (const date of dates) addOption(dateFilter, date, date);
+dateFilter.addEventListener("change", () => {
+  selectedDate = dateFilter.value;
+  render();
+});
+
+addOption(roomFilter, "all", "[全部]");
+const rooms = [...new Set(DATA.map(record => String(record.room || "")))].sort((a, b) => a.localeCompare(b));
+for (const room of rooms) addOption(roomFilter, room, room || "[无房间]");
+roomFilter.addEventListener("change", () => {
+  selectedRoom = roomFilter.value;
+  render();
+});
+
 function formatTime(ts) {
   const d = new Date(ts);
   const pad = (value) => String(value).padStart(2, "0");
@@ -238,6 +292,8 @@ function render() {
   const filtered = DATA.filter(record => {
     if (current !== "all" && String(record.playerId) !== current) return false;
     if (!kindVisibleFor(record)) return false;
+    if (selectedDate !== "all" && dateKey(record.ts) !== selectedDate) return false;
+    if (selectedRoom !== "all" && String(record.room || "") !== selectedRoom) return false;
     if (!q) return true;
     return [record.text, SHOW_ORIGINAL ? record.original : "", record.name, record.room, record.account, record.playerName]
       .some(value => String(value || "").toLowerCase().includes(q));

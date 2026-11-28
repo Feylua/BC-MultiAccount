@@ -3,6 +3,7 @@ import { downloadExport } from "./export-html.js";
 const RANGES = [
 	{ value: "24h", label: "最近 24 小时", ms: 24 * 60 * 60 * 1000 },
 	{ value: "7d", label: "最近 7 天", ms: 7 * 24 * 60 * 60 * 1000 },
+	{ value: "30d", label: "最近 30 天", ms: 30 * 24 * 60 * 60 * 1000 },
 ];
 
 export function createLogDialog({ logger }) {
